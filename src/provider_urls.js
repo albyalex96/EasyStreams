@@ -1,33 +1,4 @@
 "use strict";
-
-function safeRequire(moduleName) {
-  try {
-    // eslint-disable-next-line global-require
-    return require(moduleName);
-  } catch {
-    return null;
-  }
-}
-
-const fs = safeRequire("fs");
-const path = safeRequire("path");
-
-let embeddedProviderUrls = {};
-try {
-  // Bootstrap defaults from JSON (bundled in provider builds, RN-safe).
-  // eslint-disable-next-line global-require
-  embeddedProviderUrls = require("../provider_urls.json");
-} catch {
-  embeddedProviderUrls = {};
-}
-
-const defaultProviderUrlsFile =
-  path && typeof __dirname !== "undefined"
-    ? path.resolve(__dirname, "..", "provider_urls.json")
-    : "";
-
-const PROVIDER_URLS_FILE = defaultProviderUrlsFile;
-const RELOAD_INTERVAL_MS = 1500;
 const PROVIDER_URLS_URL = "https://raw.githubusercontent.com/realbestia1/easystreams/refs/heads/main/provider_urls.json";
 const REMOTE_RELOAD_INTERVAL_MS = 10000;
 const REMOTE_FETCH_TIMEOUT_MS = 5000;
@@ -43,8 +14,6 @@ const ALIASES = {
   mapping_api: ["mappingapi", "mapping_api_url", "mapping_url"]
 };
 
-let lastCheckAt = 0;
-let lastMtimeMs = -1;
 let lastData = {};
 let lastRemoteCheckAt = 0;
 let remoteInFlight = null;
@@ -71,35 +40,8 @@ function toNormalizedMap(raw) {
   return out;
 }
 
-function reloadProviderUrlsIfNeeded(force = false) {
-  if (!fs || !PROVIDER_URLS_FILE) return;
-
-  const now = Date.now();
-  if (!force && now - lastCheckAt < RELOAD_INTERVAL_MS) return;
-  lastCheckAt = now;
-
-  let stat;
-  try {
-    stat = fs.statSync(PROVIDER_URLS_FILE);
-  } catch {
-    if (lastMtimeMs !== -1) {
-      lastMtimeMs = -1;
-      lastData = {};
-    }
-    return;
-  }
-
-  if (!force && stat.mtimeMs === lastMtimeMs) return;
-
-  try {
-    const raw = fs.readFileSync(PROVIDER_URLS_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    lastData = toNormalizedMap(parsed);
-    lastMtimeMs = stat.mtimeMs;
-  } catch {
-    lastData = {};
-    lastMtimeMs = stat.mtimeMs;
-  }
+function reloadProviderUrlsIfNeeded() {
+  // Local provider URLs are intentionally disabled; only remote is used.
 }
 
 function getFetchImpl() {
@@ -166,7 +108,6 @@ async function refreshProviderUrlsFromRemoteIfNeeded(force = false) {
 }
 
 function findFromJson(providerKey) {
-  reloadProviderUrlsIfNeeded(false);
   refreshProviderUrlsFromRemoteIfNeeded(false);
   const key = normalizeKey(providerKey);
   const candidates = [key, ...(ALIASES[key] || [])].map(normalizeKey);
@@ -183,7 +124,7 @@ function getProviderUrl(providerKey) {
 }
 
 function getProviderUrlsFilePath() {
-  return PROVIDER_URLS_FILE;
+  return "";
 }
 
 function getProviderUrlsSourceUrl() {
@@ -197,5 +138,6 @@ module.exports = {
   getProviderUrlsSourceUrl
 };
 
-// Initialize from embedded JSON immediately.
-lastData = toNormalizedMap(embeddedProviderUrls);
+// Start with empty data; remote refresh will populate in background.
+lastData = {};
+refreshProviderUrlsFromRemoteIfNeeded(true);

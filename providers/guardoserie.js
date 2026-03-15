@@ -206,6 +206,8 @@ var require_dropload = __commonJS({
           }
           return null;
         } catch (e) {
+          const errorCode = e && e.code || e && e.cause && e.cause.code;
+          if (errorCode === "ENOTFOUND") return null;
           console.error("[Extractors] DropLoad extraction error:", e);
           return null;
         }
@@ -7392,44 +7394,10 @@ var require_formatter = __commonJS({
   }
 });
 
-// provider_urls.json
-var require_provider_urls = __commonJS({
-  "provider_urls.json"(exports2, module2) {
-    module2.exports = {
-      animeunity: "https://www.animeunity.so",
-      animeworld: "https://www.animeworld.ac",
-      animesaturn: "https://www.animesaturn.cx",
-      streamingcommunity: "https://vixsrc.to",
-      guardahd: "https://guardahd.stream",
-      guardaserie: "https://guardaserietv.skin",
-      guardoserie: "https://guardoserie.best",
-      mapping_api: "https://animemapping.stremio.dpdns.org"
-    };
-  }
-});
-
 // src/provider_urls.js
-var require_provider_urls2 = __commonJS({
+var require_provider_urls = __commonJS({
   "src/provider_urls.js"(exports2, module2) {
     "use strict";
-    function safeRequire(moduleName) {
-      try {
-        return require(moduleName);
-      } catch (e) {
-        return null;
-      }
-    }
-    var fs = safeRequire("fs");
-    var path = safeRequire("path");
-    var embeddedProviderUrls = {};
-    try {
-      embeddedProviderUrls = require_provider_urls();
-    } catch (e) {
-      embeddedProviderUrls = {};
-    }
-    var defaultProviderUrlsFile = path && typeof __dirname !== "undefined" ? path.resolve(__dirname, "..", "provider_urls.json") : "";
-    var PROVIDER_URLS_FILE = defaultProviderUrlsFile;
-    var RELOAD_INTERVAL_MS = 1500;
     var PROVIDER_URLS_URL = "https://raw.githubusercontent.com/realbestia1/easystreams/refs/heads/main/provider_urls.json";
     var REMOTE_RELOAD_INTERVAL_MS = 1e4;
     var REMOTE_FETCH_TIMEOUT_MS = 5e3;
@@ -7443,8 +7411,6 @@ var require_provider_urls2 = __commonJS({
       guardoserie: ["guardo_serie"],
       mapping_api: ["mappingapi", "mapping_api_url", "mapping_url"]
     };
-    var lastCheckAt = 0;
-    var lastMtimeMs = -1;
     var lastData = {};
     var lastRemoteCheckAt = 0;
     var remoteInFlight = null;
@@ -7467,31 +7433,7 @@ var require_provider_urls2 = __commonJS({
       }
       return out;
     }
-    function reloadProviderUrlsIfNeeded(force = false) {
-      if (!fs || !PROVIDER_URLS_FILE) return;
-      const now = Date.now();
-      if (!force && now - lastCheckAt < RELOAD_INTERVAL_MS) return;
-      lastCheckAt = now;
-      let stat;
-      try {
-        stat = fs.statSync(PROVIDER_URLS_FILE);
-      } catch (e) {
-        if (lastMtimeMs !== -1) {
-          lastMtimeMs = -1;
-          lastData = {};
-        }
-        return;
-      }
-      if (!force && stat.mtimeMs === lastMtimeMs) return;
-      try {
-        const raw = fs.readFileSync(PROVIDER_URLS_FILE, "utf8");
-        const parsed = JSON.parse(raw);
-        lastData = toNormalizedMap(parsed);
-        lastMtimeMs = stat.mtimeMs;
-      } catch (e) {
-        lastData = {};
-        lastMtimeMs = stat.mtimeMs;
-      }
+    function reloadProviderUrlsIfNeeded() {
     }
     function getFetchImpl() {
       if (typeof fetch === "function") return fetch.bind(globalThis);
@@ -7548,7 +7490,6 @@ var require_provider_urls2 = __commonJS({
       });
     }
     function findFromJson(providerKey) {
-      reloadProviderUrlsIfNeeded(false);
       refreshProviderUrlsFromRemoteIfNeeded(false);
       const key = normalizeKey(providerKey);
       const candidates = [key, ...ALIASES[key] || []].map(normalizeKey);
@@ -7563,7 +7504,7 @@ var require_provider_urls2 = __commonJS({
       return fromJson || "";
     }
     function getProviderUrlsFilePath() {
-      return PROVIDER_URLS_FILE;
+      return "";
     }
     function getProviderUrlsSourceUrl() {
       return PROVIDER_URLS_URL;
@@ -7574,7 +7515,8 @@ var require_provider_urls2 = __commonJS({
       getProviderUrlsFilePath,
       getProviderUrlsSourceUrl
     };
-    lastData = toNormalizedMap(embeddedProviderUrls);
+    lastData = {};
+    refreshProviderUrlsFromRemoteIfNeeded(true);
   }
 });
 
@@ -7583,7 +7525,7 @@ var { USER_AGENT } = require_common();
 var { extractLoadm, extractUqload, extractDropLoad } = require_extractors();
 var { formatStream } = require_formatter();
 var { checkQualityFromPlaylist } = require_quality_helper();
-var { getProviderUrl } = require_provider_urls2();
+var { getProviderUrl } = require_provider_urls();
 function getGuardoserieBaseUrl() {
   return getProviderUrl("guardoserie");
 }

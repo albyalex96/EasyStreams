@@ -43,6 +43,8 @@ async function extractDropLoad(url, refererBase = null) {
     }
     return null;
   } catch (e) {
+    const errorCode = (e && e.code) || (e && e.cause && e.cause.code);
+    if (errorCode === "ENOTFOUND") return null;
     console.error("[Extractors] DropLoad extraction error:", e);
     return null;
   }
