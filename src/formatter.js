@@ -116,7 +116,7 @@ function formatStream(stream, providerName) {
         behaviorHints.headers = finalHeaders;
     }
 
-    behaviorHints.notWebReady = shouldSetNotWebReady(stream.url, finalHeaders, behaviorHints);
+    behaviorHints.notWebReady = false;
 
     const finalName = pName;
     let finalTitle = `📁 ${stream.title || 'Stream'}`;

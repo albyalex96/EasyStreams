@@ -7433,38 +7433,6 @@ var require_extractors = __commonJS({
 // src/formatter.js
 var require_formatter = __commonJS({
   "src/formatter.js"(exports2, module2) {
-    function isMp4Url(rawUrl, depth = 0) {
-      const url = String(rawUrl || "").trim();
-      if (!url) return false;
-      const directMatch = (value) => /\.mp4(?:[?#].*)?$/i.test(String(value || "").trim());
-      if (directMatch(url)) return true;
-      if (depth >= 1) return false;
-      try {
-        const parsed = new URL(url);
-        if (String(parsed.pathname || "").toLowerCase().endsWith(".mp4")) return true;
-        const nestedKeys = ["url", "src", "file", "link", "stream"];
-        for (const key of nestedKeys) {
-          const nested = parsed.searchParams.get(key);
-          if (!nested) continue;
-          let decoded = nested;
-          try {
-            decoded = decodeURIComponent(nested);
-          } catch (_) {
-            decoded = nested;
-          }
-          if (isMp4Url(decoded, depth + 1)) return true;
-        }
-        return false;
-      } catch (e) {
-        return directMatch(url);
-      }
-    }
-    function shouldSetNotWebReady(url, headers, behaviorHints = {}) {
-      const proxyHeaders = behaviorHints.proxyHeaders && behaviorHints.proxyHeaders.request;
-      if (proxyHeaders && Object.keys(proxyHeaders).length > 0) return true;
-      if (headers && Object.keys(headers).length > 0) return true;
-      return !isMp4Url(url);
-    }
     function formatStream(stream, providerName) {
       let quality = stream.quality || "";
       if (quality === "2160p") quality = "\u{1F525}4K UHD";
@@ -7505,7 +7473,7 @@ var require_formatter = __commonJS({
         behaviorHints.proxyHeaders.request = finalHeaders;
         behaviorHints.headers = finalHeaders;
       }
-      behaviorHints.notWebReady = shouldSetNotWebReady(stream.url, finalHeaders, behaviorHints);
+      behaviorHints.notWebReady = false;
       const finalName = pName;
       let finalTitle = `\u{1F4C1} ${stream.title || "Stream"}`;
       if (desc) finalTitle += ` | ${desc}`;
