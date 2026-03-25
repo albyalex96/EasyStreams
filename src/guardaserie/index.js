@@ -18,13 +18,12 @@ var __async = (__this, __arguments, generator) => {
     step((generator = generator.apply(__this, __arguments)).next());
   });
 };
-const { getProviderUrl } = require("../provider_urls.js");
 function getGuardaserieBaseUrl() {
-  return getProviderUrl("guardaserie");
+  return "https://guardaserietv.cyou";
 }
 const TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
 function getMappingApiUrl() {
-  return getProviderUrl("mapping_api").replace(/\/+$/, "");
+  return "https://animemapping.stremio.dpdns.org";
 }
 function normalizeConfigBoolean(value) {
   if (value === true) return true;

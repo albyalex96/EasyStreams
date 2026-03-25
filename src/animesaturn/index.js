@@ -3,15 +3,14 @@
 const cheerio = require("cheerio");
 const { formatStream } = require("../formatter.js");
 const { checkQualityFromPlaylist } = require("../quality_helper.js");
-const { getProviderUrl } = require("../provider_urls.js");
 const { createTimeoutSignal } = require("../fetch_helper.js");
 
 function getSaturnBaseUrl() {
-  return getProviderUrl("animesaturn");
+  return "https://www.animesaturn.cx";
 }
 
 function getMappingApiBase() {
-  return getProviderUrl("mapping_api").replace(/\/+$/, "");
+  return "https://animemapping.stremio.dpdns.org";
 }
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";

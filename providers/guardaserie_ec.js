@@ -55,132 +55,6 @@ var __async = (__this, __arguments, generator) => {
   });
 };
 
-// src/provider_urls.js
-var require_provider_urls = __commonJS({
-  "src/provider_urls.js"(exports2, module2) {
-    "use strict";
-    var PROVIDER_URLS_URL = "https://raw.githubusercontent.com/realbestia1/easystreams/refs/heads/main/provider_urls.json";
-    var REMOTE_RELOAD_INTERVAL_MS = 1e4;
-    var REMOTE_FETCH_TIMEOUT_MS = 5e3;
-    var ALIASES = {
-      animeunity: ["animeunuty", "anime_unity"],
-      animeworld: ["anime_world"],
-      animesaturn: ["anime_saturn"],
-      streamingcommunity: ["streaming_community"],
-      guardahd: ["guarda_hd"],
-      guardaserie: ["guarda_serie"],
-      guardoserie: ["guardo_serie"],
-      mapping_api: ["mappingapi", "mapping_api_url", "mapping_url"]
-    };
-    var lastData = {};
-    var lastRemoteCheckAt = 0;
-    var remoteInFlight = null;
-    function normalizeKey(key) {
-      return String(key || "").trim().toLowerCase();
-    }
-    function normalizeUrl(value) {
-      const text = String(value || "").trim();
-      if (!text) return "";
-      return text.replace(/\/+$/, "");
-    }
-    function toNormalizedMap(raw) {
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-      const out = {};
-      for (const [key, value] of Object.entries(raw)) {
-        const normalizedKey = normalizeKey(key);
-        const normalizedValue = normalizeUrl(value);
-        if (!normalizedKey || !normalizedValue) continue;
-        out[normalizedKey] = normalizedValue;
-      }
-      return out;
-    }
-    function reloadProviderUrlsIfNeeded() {
-    }
-    function getFetchImpl() {
-      if (typeof fetch === "function") return fetch.bind(globalThis);
-      return null;
-    }
-    function createTimeoutSignal(timeoutMs) {
-      const parsed = Number.parseInt(String(timeoutMs), 10);
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        return { signal: void 0, cleanup: null };
-      }
-      if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
-        return { signal: AbortSignal.timeout(parsed), cleanup: null };
-      }
-      if (typeof AbortController !== "undefined" && typeof setTimeout === "function") {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), parsed);
-        return {
-          signal: controller.signal,
-          cleanup: () => clearTimeout(timeoutId)
-        };
-      }
-      return { signal: void 0, cleanup: null };
-    }
-    function refreshProviderUrlsFromRemoteIfNeeded(force = false) {
-      return __async(this, null, function* () {
-        if (!PROVIDER_URLS_URL) return;
-        if (remoteInFlight) return;
-        const now = Date.now();
-        if (!force && now - lastRemoteCheckAt < REMOTE_RELOAD_INTERVAL_MS) return;
-        lastRemoteCheckAt = now;
-        const fetchImpl = getFetchImpl();
-        if (!fetchImpl) return;
-        remoteInFlight = (() => __async(null, null, function* () {
-          const timeoutConfig = createTimeoutSignal(REMOTE_FETCH_TIMEOUT_MS);
-          try {
-            const response = yield fetchImpl(PROVIDER_URLS_URL, {
-              signal: timeoutConfig.signal,
-              headers: {
-                "accept": "application/json"
-              }
-            });
-            if (!response || !response.ok) return;
-            const payload = yield response.json();
-            const parsed = toNormalizedMap(payload);
-            if (Object.keys(parsed).length > 0) {
-              lastData = parsed;
-            }
-          } catch (e) {
-          } finally {
-            if (typeof timeoutConfig.cleanup === "function") timeoutConfig.cleanup();
-            remoteInFlight = null;
-          }
-        }))();
-      });
-    }
-    function findFromJson(providerKey) {
-      refreshProviderUrlsFromRemoteIfNeeded(false);
-      const key = normalizeKey(providerKey);
-      const candidates = [key, ...ALIASES[key] || []].map(normalizeKey);
-      for (const candidate of candidates) {
-        const value = normalizeUrl(lastData[candidate]);
-        if (value) return value;
-      }
-      return "";
-    }
-    function getProviderUrl(providerKey) {
-      const fromJson = findFromJson(providerKey);
-      return fromJson || "";
-    }
-    function getProviderUrlsFilePath() {
-      return "";
-    }
-    function getProviderUrlsSourceUrl() {
-      return PROVIDER_URLS_URL;
-    }
-    module2.exports = {
-      getProviderUrl,
-      reloadProviderUrlsIfNeeded,
-      getProviderUrlsFilePath,
-      getProviderUrlsSourceUrl
-    };
-    lastData = {};
-    refreshProviderUrlsFromRemoteIfNeeded(true);
-  }
-});
-
 // src/extractors/common.js
 var require_common = __commonJS({
   "src/extractors/common.js"(exports2, module2) {
@@ -7351,41 +7225,19 @@ var require_loadm = __commonJS({
           const cleanJson = lastBraceIndex !== -1 ? decryptedStr.substring(0, lastBraceIndex + 1) : decryptedStr;
           const data = JSON.parse(cleanJson);
           const streams = [];
-          if (data.cf) {
-            let streamUrl = data.cf;
-            if (streamUrl.includes(".txt")) {
-              streamUrl += "#index.m3u8";
-            }
-            streams.push({
-              name: "Loadm (Player 1)",
-              url: streamUrl,
-              title: data.title || "HLS",
-              headers: {
-                "Referer": baseUrl
-              },
-              behaviorHints: {
-                proxyHeaders: {
-                  request: {
-                    "Referer": baseUrl
-                  }
-                },
-                notWebReady: true
-              }
-            });
-          }
           if (data.source) {
+            const playbackHeaders = {
+              "Referer": baseUrl,
+              "User-Agent": USER_AGENT
+            };
             streams.push({
-              name: "Loadm (Player 2)",
+              name: "Loadm",
               url: data.source,
               title: data.title || "M3U8",
-              headers: {
-                "Referer": baseUrl
-              },
+              headers: playbackHeaders,
               behaviorHints: {
                 proxyHeaders: {
-                  request: {
-                    "Referer": baseUrl
-                  }
+                  request: playbackHeaders
                 },
                 notWebReady: true
               }
@@ -7439,11 +7291,13 @@ var require_formatter = __commonJS({
       const normalized = {};
       for (const [key, value] of Object.entries(headers)) {
         if (value == null) continue;
-        normalized[key] = value;
         const lowerKey = String(key).toLowerCase();
-        normalized[lowerKey] = value;
-        if (lowerKey === "user-agent") normalized.userAgent = value;
-        if (lowerKey === "referer") normalized.referrer = value;
+        if (lowerKey === "user-agent") normalized["User-Agent"] = value;
+        else if (lowerKey === "referer" || lowerKey === "referrer") normalized["Referer"] = value;
+        else if (lowerKey === "origin") normalized["Origin"] = value;
+        else if (lowerKey === "accept") normalized["Accept"] = value;
+        else if (lowerKey === "accept-language") normalized["Accept-Language"] = value;
+        else normalized[key] = value;
       }
       return normalized;
     }
@@ -7491,7 +7345,7 @@ var require_formatter = __commonJS({
       if (pName) {
         pName = `\u{1F4E1} ${pName}`;
       }
-      const behaviorHints = stream.behaviorHints || {};
+      const behaviorHints = stream.behaviorHints && typeof stream.behaviorHints === "object" ? __spreadValues({}, stream.behaviorHints) : {};
       let finalHeaders = stream.headers;
       if (behaviorHints.proxyHeaders && behaviorHints.proxyHeaders.request) {
         finalHeaders = behaviorHints.proxyHeaders.request;
@@ -7504,7 +7358,12 @@ var require_formatter = __commonJS({
         behaviorHints.proxyHeaders.request = finalHeaders;
         behaviorHints.headers = finalHeaders;
       }
-      behaviorHints.notWebReady = shouldForceNotWebReadyForPlugin(stream, providerName, finalHeaders, behaviorHints);
+      const shouldForceNotWebReady = shouldForceNotWebReadyForPlugin(stream, providerName, finalHeaders, behaviorHints);
+      if (shouldForceNotWebReady) {
+        behaviorHints.notWebReady = true;
+      } else {
+        delete behaviorHints.notWebReady;
+      }
       const finalName = pName;
       let finalTitle = `\u{1F4C1} ${stream.title || "Stream"}`;
       if (desc) finalTitle += ` | ${desc}`;
@@ -7554,13 +7413,12 @@ var require_guardaserie = __commonJS({
         step((generator = generator.apply(__this, __arguments)).next());
       });
     };
-    var { getProviderUrl } = require_provider_urls();
     function getGuardaserieBaseUrl() {
-      return getProviderUrl("guardaserie");
+      return "https://guardaserietv.cyou";
     }
     var TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
     function getMappingApiUrl() {
-      return getProviderUrl("mapping_api").replace(/\/+$/, "");
+      return "https://animemapping.stremio.dpdns.org";
     }
     var USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
     var { extractMixDrop, extractDropLoad, extractSuperVideo, extractUqload, extractUpstream } = require_extractors();

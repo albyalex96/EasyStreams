@@ -79,7 +79,6 @@ const { addonBuilder, serveHTTP, getRouter } = require('stremio-addon-sdk');
 const express = require('express');
 const app = express();
 const path = require('path');
-const { getProviderUrl } = require('./src/provider_urls.js');
 const DISABLE_MIXDROP_ENV =
     typeof process !== 'undefined' &&
     process &&
@@ -264,7 +263,7 @@ global.fetch = async function (url, options = {}) {
 const ADDON_MAPPING_CACHE_TTL = 10800000;
 
 function getMappingApiUrl() {
-    return getProviderUrl('mapping_api');
+    return 'https://animemapping.stremio.dpdns.org';
 }
 const TMDB_API_KEY = '68e094699525b18a70bab2f86b1fa706';
 const CANONICAL_RESOLVE_TIMEOUT = 1500;

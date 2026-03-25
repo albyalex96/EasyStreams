@@ -63,44 +63,20 @@ async function extractLoadm(playerUrl, referer = 'guardoserie.horse') {
         const data = JSON.parse(cleanJson);
         const streams = [];
 
-        if (data.cf) {
-            let streamUrl = data.cf;
-            // Append #index.m3u8 to .txt URLs to trick ExoPlayer into recognizing HLS
-            if (streamUrl.includes('.txt')) {
-                streamUrl += '#index.m3u8';
-            }
-
-            streams.push({
-                name: 'Loadm (Player 1)',
-                url: streamUrl,
-                title: data.title || 'HLS',
-                headers: {
-                    'Referer': baseUrl
-                },
-                behaviorHints: {
-                    proxyHeaders: {
-                        request: {
-                            'Referer': baseUrl
-                        }
-                    },
-                    notWebReady: true
-                }
-            });
-        }
-
         if (data.source) {
+            const playbackHeaders = {
+                'Referer': baseUrl,
+                'User-Agent': USER_AGENT
+            };
+
             streams.push({
-                name: 'Loadm (Player 2)',
+                name: 'Loadm',
                 url: data.source,
                 title: data.title || 'M3U8',
-                headers: {
-                    'Referer': baseUrl
-                },
+                headers: playbackHeaders,
                 behaviorHints: {
                     proxyHeaders: {
-                        request: {
-                            'Referer': baseUrl
-                        }
+                        request: playbackHeaders
                     },
                     notWebReady: true
                 }

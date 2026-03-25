@@ -18,9 +18,8 @@ var __async = (__this, __arguments, generator) => {
     step((generator = generator.apply(__this, __arguments)).next());
   });
 };
-const { getProviderUrl } = require("../provider_urls.js");
 function getGuardaHdBaseUrl() {
-  return getProviderUrl("guardahd");
+  return "https://guardahd.stream";
 }
 const TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
 const USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";

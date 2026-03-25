@@ -1,7 +1,5 @@
-const { getProviderUrl } = require("../provider_urls.js");
-
 function getStreamingCommunityBaseUrl() {
-  return getProviderUrl("streamingcommunity");
+  return "https://vixsrc.to";
 }
 
 const { formatStream } = require('../formatter.js');
@@ -138,7 +136,8 @@ async function hasGuardaFallbackResults(id, type, season, episode, providerConte
 }
 
 async function getStreams(id, type, season, episode, providerContext = null) {
-  const normalizedType = String(type).toLowerCase();
+  const requestedType = String(type).toLowerCase();
+  const normalizedType = requestedType === "series" ? "tv" : requestedType;
   const baseUrl = getStreamingCommunityBaseUrl();
   const commonHeaders = getCommonHeaders();
   let tmdbId = id.toString();

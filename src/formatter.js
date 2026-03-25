@@ -30,26 +30,19 @@ function isMp4Url(rawUrl, depth = 0) {
     }
 }
 
-function shouldSetNotWebReady(url, headers, behaviorHints = {}) {
-    const proxyHeaders = behaviorHints.proxyHeaders && behaviorHints.proxyHeaders.request;
-    if (proxyHeaders && Object.keys(proxyHeaders).length > 0) return true;
-    if (headers && Object.keys(headers).length > 0) return true;
-    return !isMp4Url(url);
-}
-
 function normalizePlaybackHeaders(headers) {
     if (!headers || typeof headers !== 'object') return headers;
 
     const normalized = {};
     for (const [key, value] of Object.entries(headers)) {
         if (value == null) continue;
-        normalized[key] = value;
-
         const lowerKey = String(key).toLowerCase();
-        normalized[lowerKey] = value;
-
-        if (lowerKey === 'user-agent') normalized.userAgent = value;
-        if (lowerKey === 'referer') normalized.referrer = value;
+        if (lowerKey === 'user-agent') normalized['User-Agent'] = value;
+        else if (lowerKey === 'referer' || lowerKey === 'referrer') normalized['Referer'] = value;
+        else if (lowerKey === 'origin') normalized['Origin'] = value;
+        else if (lowerKey === 'accept') normalized['Accept'] = value;
+        else if (lowerKey === 'accept-language') normalized['Accept-Language'] = value;
+        else normalized[key] = value;
     }
 
     return normalized;
@@ -137,8 +130,10 @@ function formatStream(stream, providerName) {
         pName = `📡 ${pName}`;
     }
 
-    // Move headers to behaviorHints if present, but keep original for compatibility
-    const behaviorHints = stream.behaviorHints || {};
+    // Move headers to behaviorHints if present, but keep original for compatibility.
+    const behaviorHints = stream.behaviorHints && typeof stream.behaviorHints === 'object'
+        ? { ...stream.behaviorHints }
+        : {};
     let finalHeaders = stream.headers;
 
     if (behaviorHints.proxyHeaders && behaviorHints.proxyHeaders.request) {
@@ -152,11 +147,15 @@ function formatStream(stream, providerName) {
     if (finalHeaders) {
         behaviorHints.proxyHeaders = behaviorHints.proxyHeaders || {};
         behaviorHints.proxyHeaders.request = finalHeaders;
-        // Also support "headers" in behaviorHints directly (Stremio extension)
         behaviorHints.headers = finalHeaders;
     }
 
-    behaviorHints.notWebReady = shouldForceNotWebReadyForPlugin(stream, providerName, finalHeaders, behaviorHints);
+    const shouldForceNotWebReady = shouldForceNotWebReadyForPlugin(stream, providerName, finalHeaders, behaviorHints);
+    if (shouldForceNotWebReady) {
+        behaviorHints.notWebReady = true;
+    } else {
+        delete behaviorHints.notWebReady;
+    }
 
     const finalName = pName;
     let finalTitle = `📁 ${stream.title || 'Stream'}`;

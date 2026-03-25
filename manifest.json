@@ -1,11 +1,11 @@
 {
   "name": "EasyStreams",
-  "version": "1.1.35",
+  "version": "1.1.36",
   "scrapers": [
     {
       "id": "easystreams-guardoserie",
       "name": "Guardoserie",
-      "version": "1.1.7",
+      "version": "1.1.8",
       "description": "Movies and Series from Guardoserie",
       "resources": ["stream"],
       "contentLanguage": ["it"],
@@ -18,7 +18,7 @@
     {
       "id": "easystreams-guardoserie-ec",
       "name": "Guardoserie EC",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "description": "Movies and Series from Guardoserie with EasyCatalogs mapping",
       "resources": ["stream"],
       "contentLanguage": ["it"],
@@ -31,7 +31,7 @@
     {
       "id": "easystreams-guardahd",
       "name": "GuardaHD",
-      "version": "1.1.5",
+      "version": "1.1.6",
       "description": "Movies from GuardaHD",
       "resources": ["stream"],
       "contentLanguage": ["it"],
@@ -57,7 +57,7 @@
     {
       "id": "easystreams-guardaserie-ec",
       "name": "Guardaserie EC",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "description": "TV Series from Guardaserie with EasyCatalogs mapping",
       "resources": ["stream"],
       "contentLanguage": ["it"],
@@ -148,7 +148,7 @@
     {
       "id": "easystreams-streamingcommunity",
       "name": "StreamingCommunity",
-      "version": "1.1.22",
+      "version": "1.1.23",
       "description": "Movies and Series from StreamingCommunity",
       "resources": ["stream"],
       "contentLanguage": ["it"],
