@@ -1,56 +1,95 @@
 /**
  * Cloudflare Worker Proxy for EasyStreams Addon
- * Questo worker serve per bypassare i blocchi di Cloudflare su SuperVideo
+ * This proxy forwards the request shape more faithfully so upstream sites
+ * can still see cookies, XHR hints, and browser-style fetch metadata.
  */
 
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    const targetUrl = url.searchParams.get('url');
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "*"
+};
 
-    // Se non c'è l'URL target, restituisci un errore semplice
+function buildCorsResponse(body, init = {}) {
+  const response = new Response(body, init);
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    response.headers.set(key, value);
+  }
+  response.headers.set("X-Proxied-By", "EasyStreams-Worker");
+  return response;
+}
+
+function copyRequestHeaders(request, target) {
+  const forwarded = new Headers();
+  const headersToCopy = [
+    "user-agent",
+    "referer",
+    "origin",
+    "accept",
+    "accept-language",
+    "cache-control",
+    "pragma",
+    "cookie",
+    "range",
+    "content-type",
+    "x-requested-with",
+    "sec-fetch-dest",
+    "sec-fetch-mode",
+    "sec-fetch-site",
+    "sec-fetch-user",
+    "upgrade-insecure-requests"
+  ];
+
+  for (const header of headersToCopy) {
+    const value = request.headers.get(header);
+    if (value) forwarded.set(header, value);
+  }
+
+  if (!forwarded.get("referer")) {
+    forwarded.set("referer", `${target.origin}/`);
+  }
+
+  const isAjaxRequest =
+    (forwarded.get("x-requested-with") || "").toLowerCase() === "xmlhttprequest";
+  if (isAjaxRequest && !forwarded.get("origin")) {
+    forwarded.set("origin", target.origin);
+  }
+
+  return forwarded;
+}
+
+export default {
+  async fetch(request) {
+    if (request.method === "OPTIONS") {
+      return buildCorsResponse(null, { status: 204 });
+    }
+
+    const incomingUrl = new URL(request.url);
+    const targetUrl = incomingUrl.searchParams.get("url");
+
     if (!targetUrl) {
-      return new Response('EasyStreams Proxy Worker: Missing "url" parameter', { 
+      return buildCorsResponse('EasyStreams Proxy Worker: Missing "url" parameter', {
         status: 400,
-        headers: { 'Content-Type': 'text/plain' }
+        headers: { "Content-Type": "text/plain" }
       });
     }
 
     try {
       const target = new URL(targetUrl);
-      
-      // Crea nuovi header basandoci su quelli della richiesta originale
-      const newHeaders = new Headers();
-      
-      // Copia gli header essenziali se presenti
-      const headersToCopy = ['user-agent', 'referer', 'accept', 'accept-language', 'range'];
-      for (const header of headersToCopy) {
-        const value = request.headers.get(header);
-        if (value) newHeaders.set(header, value);
-      }
-
-      // Forza l'Origin e l'Host per il target
-      newHeaders.set('Origin', target.origin);
-      
-      // Esegui la richiesta al sito bloccato
       const response = await fetch(targetUrl, {
         method: request.method,
-        headers: newHeaders,
-        redirect: 'follow'
+        headers: copyRequestHeaders(request, target),
+        body:
+          request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+        redirect: "follow"
       });
 
-      // Crea una nuova risposta per poter modificare gli header CORS
-      const proxyResponse = new Response(response.body, response);
-      
-      // Aggiungi header CORS per permettere all'addon di leggere la risposta
-      proxyResponse.headers.set('Access-Control-Allow-Origin', '*');
-      proxyResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      proxyResponse.headers.set('X-Proxied-By', 'EasyStreams-Worker');
-
-      return proxyResponse;
-
-    } catch (e) {
-      return new Response(`Proxy Error: ${e.message}`, { status: 500 });
+      return buildCorsResponse(response.body, response);
+    } catch (error) {
+      return buildCorsResponse(`Proxy Error: ${error.message}`, {
+        status: 500,
+        headers: { "Content-Type": "text/plain" }
+      });
     }
   }
 };

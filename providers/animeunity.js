@@ -7727,14 +7727,14 @@ function fetchWithTimeout(_0) {
   });
 }
 function warmAnimeUnitySession() {
-  return __async(this, arguments, function* (timeoutMs = FETCH_TIMEOUT) {
+  return __async(this, arguments, function* (timeoutMs = FETCH_TIMEOUT, requestUrl = getUnityBaseUrl(), sourceUrl = getUnityBaseUrl()) {
     if (animeUnitySessionWarmupPromise) return animeUnitySessionWarmupPromise;
     animeUnitySessionWarmupPromise = (() => __async(null, null, function* () {
       const response = yield fetchWithTimeout(
-        getUnityBaseUrl(),
+        requestUrl,
         {
           method: "GET",
-          headers: buildAnimeUnityHeaders(getUnityBaseUrl(), {}, "text"),
+          headers: buildAnimeUnityHeaders(sourceUrl, {}, "text"),
           redirect: "follow"
         },
         timeoutMs
@@ -7795,8 +7795,16 @@ function requestAnimeUnityResponse(_0) {
     const proxiedUrl = getProxiedUrl(url);
     if (response.status === 403 && proxiedUrl && proxiedUrl !== url) {
       console.warn(`[AnimeUnity] 403 persisted, retrying through proxy: ${url}`);
+      const proxiedBaseUrl = getProxiedUrl(getUnityBaseUrl());
+      if (proxiedBaseUrl && proxiedBaseUrl !== getUnityBaseUrl()) {
+        try {
+          yield warmAnimeUnitySession(timeoutMs, proxiedBaseUrl, getUnityBaseUrl());
+        } catch (error) {
+          console.warn(`[AnimeUnity] proxy session warmup failed: ${error.message}`);
+        }
+      }
       const proxiedHeaders = buildAnimeUnityHeaders(url, headers, as);
-      const proxiedResponse = yield doRequest(proxiedUrl, proxiedHeaders);
+      const proxiedResponse = yield doRequest(proxiedUrl, proxiedHeaders, { storeCookies: true });
       if (proxiedResponse.ok) return proxiedResponse;
       throw new Error(`HTTP ${proxiedResponse.status} ${proxiedResponse.statusText} for ${url}`);
     }
