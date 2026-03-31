@@ -7406,7 +7406,7 @@ function getGuardoserieBaseUrl() {
 }
 var TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
 function getMappingApiUrl() {
-  return "https://animemapping.stremio.dpdns.org";
+  return "https://animemapping.realbestia.com";
 }
 function getIdsFromKitsu(kitsuId, season, episode, providerContext = null) {
   return __async(this, null, function* () {

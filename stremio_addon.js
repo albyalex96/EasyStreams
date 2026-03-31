@@ -1197,7 +1197,7 @@ function getProviderExecutionOrder(type, providerId, requestContext, animeRoutin
 
 const builder = new addonBuilder({
     id: 'org.bestia.easystreams',
-    version: '1.1.0',
+    version: '1.1.1',
     name: 'Easy Streams',
     description: 'Italian Streams providers',
     catalogs: [],

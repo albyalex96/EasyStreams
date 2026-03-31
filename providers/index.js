@@ -7673,7 +7673,7 @@ var require_guardaserie = __commonJS({
     }
     var TMDB_API_KEY2 = "68e094699525b18a70bab2f86b1fa706";
     function getMappingApiUrl() {
-      return "https://animemapping.stremio.dpdns.org";
+      return "https://animemapping.realbestia.com";
     }
     var USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
     var { extractMixDrop, extractDropLoad, extractSuperVideo, extractUqload, extractUpstream } = require_extractors();
@@ -7922,7 +7922,7 @@ var require_guardoserie = __commonJS({
     }
     var TMDB_API_KEY2 = "68e094699525b18a70bab2f86b1fa706";
     function getMappingApiUrl() {
-      return "https://animemapping.stremio.dpdns.org";
+      return "https://animemapping.realbestia.com";
     }
     function getIdsFromKitsu(kitsuId, season, episode, providerContext = null) {
       return __async(this, null, function* () {
@@ -8807,7 +8807,7 @@ var require_animeunity = __commonJS({
       return "https://www.animeunity.so";
     }
     function getMappingApiBase() {
-      return "https://animemapping.stremio.dpdns.org";
+      return "https://animemapping.realbestia.com";
     }
     var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
     var FETCH_TIMEOUT = 1e4;
@@ -9715,7 +9715,7 @@ var require_animeworld = __commonJS({
       return "https://www.animeworld.ac";
     }
     function getMappingApiBase() {
-      return "https://animemapping.stremio.dpdns.org";
+      return "https://animemapping.realbestia.com";
     }
     var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
     var FETCH_TIMEOUT = 1e4;
@@ -10592,7 +10592,7 @@ var require_animesaturn = __commonJS({
       return "https://www.animesaturn.cx";
     }
     function getMappingApiBase() {
-      return "https://animemapping.stremio.dpdns.org";
+      return "https://animemapping.realbestia.com";
     }
     var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
     var FETCH_TIMEOUT = 1e4;

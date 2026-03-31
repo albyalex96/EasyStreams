@@ -7,7 +7,7 @@ function getGuardoserieBaseUrl() {
 }
 const TMDB_API_KEY = '68e094699525b18a70bab2f86b1fa706';
 function getMappingApiUrl() {
-    return 'https://animemapping.stremio.dpdns.org';
+    return 'https://animemapping.realbestia.com';
 }
 function normalizeConfigBoolean(value) {
     if (value === true) return true;
