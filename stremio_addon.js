@@ -114,9 +114,6 @@ if (/^https?:\/\//i.test(normalizedProxyEnv)) {
 if (DISABLE_UQLOAD_IN_ADDON) {
     global.DISABLE_UQLOAD = true;
 }
-if (DISABLE_MIXDROP_IN_ADDON) {
-    global.DISABLE_MIXDROP = true;
-}
 
 // Performance Metrics
 const metrics = {
@@ -1273,6 +1270,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
     const mappingLanguage = resolveMappingLanguageFromConfig(config);
     const easyProxyUrl = resolveEasyProxyUrlFromConfig(config);
     const easyProxyPassword = resolveEasyProxyPasswordFromConfig(config);
+    global.DISABLE_MIXDROP = DISABLE_MIXDROP_IN_ADDON && !easyProxyUrl;
     const requestKey = `${type}:${id}:lang:${getMappingLanguageToken(mappingLanguage)}:proxy:${getEasyProxyToken(easyProxyUrl, easyProxyPassword)}`;
     const parsedRequest = parseStremioRequestId(type, id);
     const providerId = parsedRequest.providerId;
