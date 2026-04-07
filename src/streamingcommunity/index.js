@@ -240,7 +240,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         quality: normalizedQuality,
         type: "direct",
         behaviorHints: {
-          notWebReady: false
+          notWebReady: true
         }
       };
 
