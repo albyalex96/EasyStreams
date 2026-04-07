@@ -8298,6 +8298,7 @@ var require_streamingcommunity = __commonJS({
       return {
         "User-Agent": USER_AGENT,
         "Referer": `${getStreamingCommunityBaseUrl()}/`,
+        "Origin": getStreamingCommunityBaseUrl(),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
         "Sec-Fetch-Dest": "document",
@@ -8462,8 +8463,9 @@ var require_streamingcommunity = __commonJS({
             console.log(`[StreamingCommunity] Found stream URL: ${streamUrl}`);
             let quality = "720p";
             try {
+              const playlistHeaders = __spreadProps(__spreadValues({}, commonHeaders), { "Referer": url });
               const playlistResponse = yield fetch(streamUrl, {
-                headers: commonHeaders
+                headers: playlistHeaders
               });
               if (playlistResponse.ok) {
                 const playlistText = yield playlistResponse.text();
@@ -8493,7 +8495,7 @@ var require_streamingcommunity = __commonJS({
               name: `StreamingCommunity`,
               title: finalDisplayName,
               url: streamUrl,
-              headers: commonHeaders,
+              headers: __spreadProps(__spreadValues({}, commonHeaders), { "Referer": url }),
               quality: normalizedQuality,
               type: "direct",
               behaviorHints: {

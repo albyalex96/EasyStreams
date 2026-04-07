@@ -21,6 +21,7 @@ function getCommonHeaders() {
   return {
     "User-Agent": USER_AGENT,
     "Referer": `${getStreamingCommunityBaseUrl()}/`,
+    "Origin": getStreamingCommunityBaseUrl(),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
     "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
     "Sec-Fetch-Dest": "document",
@@ -198,8 +199,9 @@ async function getStreams(id, type, season, episode, providerContext = null) {
 
       let quality = "720p";
       try {
+        const playlistHeaders = { ...commonHeaders, "Referer": url };
         const playlistResponse = await fetch(streamUrl, {
-          headers: commonHeaders
+          headers: playlistHeaders
         });
         if (playlistResponse.ok) {
           const playlistText = await playlistResponse.text();
@@ -236,7 +238,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         name: `StreamingCommunity`,
         title: finalDisplayName,
         url: streamUrl,
-        headers: commonHeaders,
+        headers: { ...commonHeaders, "Referer": url },
         quality: normalizedQuality,
         type: "direct",
         behaviorHints: {
