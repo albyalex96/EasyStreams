@@ -8773,6 +8773,7 @@ var require_streamingcommunity = __commonJS({
               name: `StreamingCommunity`,
               title: finalDisplayName,
               url: streamUrl,
+              easyProxySourceUrl: url,
               quality: normalizedQuality,
               type: "direct",
               behaviorHints: {
