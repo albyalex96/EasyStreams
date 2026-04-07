@@ -1461,15 +1461,22 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                         titleUI += `\n🔍EasyStreams`;
                     }
 
+                    const finalBehaviorHints = {
+                        ...(s.behaviorHints || {}),
+                        notWebReady: proxiedByEasyProxy ? false : s?.behaviorHints?.notWebReady === true,
+                        bingeGroup: name // Consistent grouping by provider name
+                    };
+
+                    if (proxiedByEasyProxy) {
+                        delete finalBehaviorHints.proxyHeaders;
+                        delete finalBehaviorHints.headers;
+                    }
+
                     return {
                         name: nameUI,
                         title: titleUI,
                         url: finalStreamUrl,
-                        behaviorHints: {
-                            ...(s.behaviorHints || {}),
-                            notWebReady: proxiedByEasyProxy ? false : s?.behaviorHints?.notWebReady === true,
-                            bingeGroup: name // Consistent grouping by provider name
-                        },
+                        behaviorHints: finalBehaviorHints,
                         language: s.language
                     };
                 });
