@@ -1384,6 +1384,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                         name: nameUI,
                         title: titleUI,
                         url: s.url,
+                        headers: s.headers,
                         behaviorHints: {
                             ...(s.behaviorHints || {}),
                             notWebReady: s?.behaviorHints?.notWebReady === true,
