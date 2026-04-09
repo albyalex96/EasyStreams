@@ -398,7 +398,7 @@ function buildEasyProxyManifestUrl(easyProxyUrl, easyProxyPassword, streamUrl) {
     const normalizedStreamUrl = String(streamUrl || '').trim();
     if (!proxyBaseUrl || !normalizedStreamUrl) return normalizedStreamUrl;
     const passwordQuery = proxyPassword ? `&api_password=${encodeURIComponent(proxyPassword)}` : '';
-    return `${proxyBaseUrl}/proxy/hls/manifest.m3u8?d=${encodeURIComponent(normalizedStreamUrl)}${passwordQuery}`;
+    return `${proxyBaseUrl}/proxy/hls/manifest.m3u8?d=${encodeURIComponent(normalizedStreamUrl)}&redirect_stream=true${passwordQuery}`;
 }
 
 function isMixdropStreamUrl(streamUrl) {
@@ -414,7 +414,7 @@ function buildEasyProxyStreamUrl(easyProxyUrl, easyProxyPassword, streamUrl) {
     const normalizedStreamUrl = String(streamUrl || '').trim();
     if (!proxyBaseUrl || !normalizedStreamUrl) return normalizedStreamUrl;
     const passwordQuery = proxyPassword ? `&api_password=${encodeURIComponent(proxyPassword)}` : '';
-    return `${proxyBaseUrl}/proxy/stream?d=${normalizedStreamUrl}${passwordQuery}`;
+    return `${proxyBaseUrl}/proxy/stream?d=${normalizedStreamUrl}&redirect_stream=true${passwordQuery}`;
 }
 
 function hasJapaneseCharacters(value) {
