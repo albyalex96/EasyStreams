@@ -2,6 +2,7 @@ const { USER_AGENT, getProxiedUrl } = require('../extractors/common');
 const { extractLoadm, extractUqload, extractDropLoad, extractMixDrop, extractSuperVideo } = require('../extractors');
 const { formatStream } = require('../formatter');
 const { checkQualityFromPlaylist } = require('../quality_helper');
+const STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || '').trim().toLowerCase() === '1';
 function getGuardoserieBaseUrl() {
     return 'https://guardoserie.tattoo';
 }
@@ -361,6 +362,12 @@ async function getShowInfo(tmdbId, type) {
 }
 
 async function getStreams(id, type, season, episode, providerContext = null) {
+    const benchStart = Date.now();
+    const bench = [];
+    const mark = (step, meta = {}) => {
+        if (!STEP_BENCH_ENABLED) return;
+        bench.push({ step, t: Date.now() - benchStart, ...meta });
+    };
     try {
         const baseUrl = normalizeBaseUrl(getGuardoserieBaseUrl());
         if (!baseUrl) {
@@ -387,6 +394,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                 (((id.toString().match(/^kitsu:(\d+)/i) || [])[1]) || null);
             const seasonHintForKitsu = shouldIncludeSeasonHintForKitsu ? season : null;
             const mapped = kitsuId ? await getIdsFromKitsu(kitsuId, seasonHintForKitsu, episode, providerContext) : null;
+            mark('kitsu_mapping_done', { ok: Boolean(mapped && mapped.tmdbId) });
             if (mapped && mapped.tmdbId) {
                 tmdbId = mapped.tmdbId;
                 console.log(`[Guardoserie] Kitsu ${kitsuId} mapped to TMDB ID ${tmdbId}`);
@@ -409,6 +417,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                 // Need to convert IMDb to TMDB for title/year info
                 const url = `https://api.themoviedb.org/3/find/${id}?api_key=${TMDB_API_KEY}&external_source=imdb_id`;
                 const response = await fetch(url);
+                mark('imdb_to_tmdb_done', { ok: response.ok });
                 if (response.ok) {
                     const data = await response.json();
                     if (type === 'movie' && data.movie_results?.length > 0) tmdbId = data.movie_results[0].id;
@@ -420,6 +429,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         }
 
         const showInfo = await getShowInfo(tmdbId, type === 'movie' ? 'movie' : 'tv');
+        mark('tmdb_showinfo_done', { ok: Boolean(showInfo) });
         if (!showInfo) return [];
 
         const title = showInfo.name || showInfo.original_name || showInfo.title || showInfo.original_title;
@@ -430,6 +440,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
 
         // Search helper
         const searchProvider = async (query) => {
+            const searchStartedAt = Date.now();
             const searchUrl = `${baseUrl}/wp-admin/admin-ajax.php`;
             const body = `s=${encodeURIComponent(query)}&action=searchwp_live_search&swpengine=default&swpquery=${encodeURIComponent(query)}`;
 
@@ -448,6 +459,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             if (response.ok) {
                 const searchHtml = await response.text();
                 const results = extractSearchResultsFromHtml(searchHtml, baseUrl);
+                mark('search_ajax_done', { q: query, ms: Date.now() - searchStartedAt, results: results.length });
                 if (results.length > 0) return results;
             }
 
@@ -463,7 +475,9 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             });
             if (!pageRes.ok) return [];
             const pageHtml = await pageRes.text();
-            return extractSearchResultsFromHtml(pageHtml, baseUrl);
+            const fallbackResults = extractSearchResultsFromHtml(pageHtml, baseUrl);
+            mark('search_fallback_done', { q: query, ms: Date.now() - searchStartedAt, results: fallbackResults.length });
+            return fallbackResults;
         };
 
         let allResults = [];
@@ -472,6 +486,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             const res = await searchProvider(q);
             allResults.push(...res);
         }
+        mark('search_phase_done', { queries: queries.length, results: allResults.length });
 
         // Deduplicate results by URL
         allResults = Array.from(new Map(allResults.map(item => [item.url, item])).values());
@@ -521,6 +536,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             if (isExactMatch || isPartialMatch) {
                 // Verify year in the page
                 try {
+                    const verifyStartedAt = Date.now();
                     const pageRes = await fetch(result.url, { headers: { 
                         'User-Agent': USER_AGENT,
                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -529,6 +545,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                     } });
                     if (!pageRes.ok) continue;
                     const pageHtml = await pageRes.text();
+                    mark('result_verify_done', { url: result.url, ms: Date.now() - verifyStartedAt });
 
                     // Target the year specifically using regex
                     let foundYear = null;
@@ -594,6 +611,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
 
         if (!targetUrl) {
             const guessed = await guessUrlFromSlug(baseUrl, title, originalTitle);
+            mark('slug_fallback_done', { ok: Boolean(guessed) });
             if (guessed) {
                 console.log(`[Guardoserie] Slug fallback matched: ${guessed}`);
                 targetUrl = guessed;
@@ -617,6 +635,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             } });
             const pageHtml = await pageRes.text();
             const resolvedEpisodeUrl = extractEpisodeUrlFromSeriesPage(pageHtml, season, episode);
+            mark('series_episode_resolve_done', { ok: Boolean(resolvedEpisodeUrl) });
             if (resolvedEpisodeUrl) {
                 episodeUrl = resolvedEpisodeUrl;
             } else {
@@ -633,8 +652,10 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             'Referer': `${getGuardoserieBaseUrl()}/`
         } });
         const finalHtml = await finalRes.text();
+        mark('final_page_done');
 
         let playerLinks = extractPlayerLinksFromHtml(finalHtml);
+        mark('player_links_extracted', { links: playerLinks.length });
 
         // Safety fallback: if we are still on a /serie/ page, derive the episode URL and retry extraction.
         if (playerLinks.length === 0 && /\/serie\//i.test(episodeUrl)) {
@@ -653,6 +674,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                     playerLinks = fallbackLinks;
                     episodeUrl = fallbackEpisodeUrl;
                 }
+                mark('player_links_fallback_done', { links: playerLinks.length });
             }
         }
 
@@ -753,9 +775,16 @@ async function getStreams(id, type, season, episode, providerContext = null) {
 
         const nestedStreams = await Promise.all(streamPromises);
         streams = nestedStreams.flat().filter(Boolean);
+        mark('extractors_done', { streams: streams.length });
+        if (STEP_BENCH_ENABLED) {
+            console.log(`[GuardoserieBench] ${JSON.stringify({ id: String(id), type: String(type), totalMs: Date.now() - benchStart, steps: bench })}`);
+        }
 
         return streams;
     } catch (e) {
+        if (STEP_BENCH_ENABLED) {
+            console.log(`[GuardoserieBench] ${JSON.stringify({ id: String(id), type: String(type), totalMs: Date.now() - benchStart, failed: true, steps: bench, error: e?.message || String(e) })}`);
+        }
         console.error(`[Guardoserie] Error:`, e);
         return [];
     }

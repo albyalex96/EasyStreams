@@ -161,6 +161,11 @@ const ADDON_CACHE_ENABLED = true;
 const STREAM_CACHE_TTL = 10000;
 const STREAM_CACHE_MAX_SIZE = 50000;
 const STREAM_CACHE_MAX_BYTES = 100 * 1024 * 1024;
+const PROVIDER_BENCHMARK_LOGS =
+    typeof process !== 'undefined' &&
+    process &&
+    process.env &&
+    String(process.env.PROVIDER_BENCHMARK_LOGS || '').trim().toLowerCase() === '1';
 
 const streamCache = new Map();
 const inFlightStreamRequests = new Map();
@@ -1358,6 +1363,8 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
     const providerType = (type === 'movie') ? 'movie' : 'tv';
 
     const collectedStreams = [];
+    const providerBenchmarkResults = [];
+    const providersStartedAt = Date.now();
     const animeRoutingFlag = await animeRoutingFlagPromise;
     const requestStreamTimeout =
         animeRoutingFlag === true
@@ -1374,9 +1381,18 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
     logVerbose(`[Stremio] Providers selected (${selectedProviders.length}): ${selectedProviders.join(', ')}`);
 
     const providerTasks = selectedProviders.map(async (name) => {
+        const providerStartedAt = Date.now();
+        let didTimeout = false;
+        let executionError = null;
+        let rawStreamsCount = 0;
+        let processedStreamsCount = 0;
+        let finalStatus = 'success';
         try {
             const provider = providers[name];
-            if (typeof provider.getStreams !== 'function') return [];
+            if (typeof provider.getStreams !== 'function') {
+                finalStatus = 'skipped';
+                return [];
+            }
 
             logVerbose(`[${name}] Searching...`);
 
@@ -1385,6 +1401,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             let timeoutId;
             const timeoutPromise = new Promise((resolve) => {
                 timeoutId = setTimeout(() => {
+                    didTimeout = true;
                     console.warn(`[${name}] Timed out after ${providerTimeoutMs}ms`);
                     resolve([]); // Resolve with empty array on timeout
                 }, providerTimeoutMs);
@@ -1397,6 +1414,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                     logVerbose(`[${name}] Found ${streams.length} streams`);
                     return streams;
                 } catch (e) {
+                    executionError = e;
                     console.error(`[${name}] Execution Error:`, e.message);
                     return [];
                 } finally {
@@ -1406,6 +1424,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
 
             // Race between provider execution and timeout
             let streams = await Promise.race([providerPromise, timeoutPromise]);
+            rawStreamsCount = Array.isArray(streams) ? streams.length : 0;
 
             // Fase 2.3: Stream Processing
             const processedStreams = streams
@@ -1488,6 +1507,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                         language: s.language
                     };
                 });
+            processedStreamsCount = processedStreams.length;
 
             if (processedStreams.length > 0) {
                 collectedStreams.push(...processedStreams);
@@ -1495,8 +1515,23 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
 
             return processedStreams;
         } catch (e) {
+            executionError = e;
             console.error(`[${name}] Error:`, e.message);
             return [];
+        } finally {
+            if (didTimeout) {
+                finalStatus = 'timeout';
+            } else if (executionError) {
+                finalStatus = 'error';
+            }
+
+            providerBenchmarkResults.push({
+                provider: name,
+                status: finalStatus,
+                elapsedMs: Date.now() - providerStartedAt,
+                rawStreams: rawStreamsCount,
+                processedStreams: processedStreamsCount
+            });
         }
     });
 
@@ -1521,6 +1556,34 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
 
     // Filter out streams without URL
     const validStreams = streams.filter(s => s.url);
+
+    if (PROVIDER_BENCHMARK_LOGS && providerBenchmarkResults.length > 0) {
+        const requestLabel = `${type}:${id}`;
+        const totalMs = Date.now() - providersStartedAt;
+        const sortedBench = providerBenchmarkResults
+            .slice()
+            .sort((a, b) => b.elapsedMs - a.elapsedMs);
+        const slowest = sortedBench[0];
+        logInfo(`[ProviderBench] ${JSON.stringify({
+            kind: 'request',
+            request: requestLabel,
+            totalMs,
+            providers: sortedBench.length,
+            slowestProvider: slowest.provider,
+            slowestMs: slowest.elapsedMs
+        })}`);
+        for (const entry of sortedBench) {
+            logInfo(`[ProviderBench] ${JSON.stringify({
+                kind: 'provider',
+                request: requestLabel,
+                provider: entry.provider,
+                status: entry.status,
+                elapsedMs: entry.elapsedMs,
+                rawStreams: entry.rawStreams,
+                processedStreams: entry.processedStreams
+            })}`);
+        }
+    }
 
     // Sort: StreamingCommunity first, then Language (ITA > SUB ITA), then Quality Descending
     validStreams.sort((a, b) => {

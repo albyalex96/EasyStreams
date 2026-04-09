@@ -7404,6 +7404,7 @@ var require_guardoserie = __commonJS({
     var { extractLoadm, extractUqload, extractDropLoad, extractMixDrop, extractSuperVideo } = require_extractors();
     var { formatStream } = require_formatter();
     var { checkQualityFromPlaylist } = require_quality_helper();
+    var STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || "").trim().toLowerCase() === "1";
     function getGuardoserieBaseUrl() {
       return "https://guardoserie.tattoo";
     }
@@ -7688,6 +7689,12 @@ var require_guardoserie = __commonJS({
     function getStreams2(id, type, season, episode, providerContext = null) {
       return __async(this, null, function* () {
         var _a, _b;
+        const benchStart = Date.now();
+        const bench = [];
+        const mark = (step, meta = {}) => {
+          if (!STEP_BENCH_ENABLED) return;
+          bench.push(__spreadValues({ step, t: Date.now() - benchStart }, meta));
+        };
         try {
           const baseUrl = normalizeBaseUrl(getGuardoserieBaseUrl());
           if (!baseUrl) {
@@ -7706,6 +7713,7 @@ var require_guardoserie = __commonJS({
             const kitsuId = contextKitsuId || ((id.toString().match(/^kitsu:(\d+)/i) || [])[1] || null);
             const seasonHintForKitsu = shouldIncludeSeasonHintForKitsu ? season : null;
             const mapped = kitsuId ? yield getIdsFromKitsu(kitsuId, seasonHintForKitsu, episode, providerContext) : null;
+            mark("kitsu_mapping_done", { ok: Boolean(mapped && mapped.tmdbId) });
             if (mapped && mapped.tmdbId) {
               tmdbId = mapped.tmdbId;
               console.log(`[Guardoserie] Kitsu ${kitsuId} mapped to TMDB ID ${tmdbId}`);
@@ -7727,6 +7735,7 @@ var require_guardoserie = __commonJS({
             } else {
               const url = `https://api.themoviedb.org/3/find/${id}?api_key=${TMDB_API_KEY}&external_source=imdb_id`;
               const response = yield fetch(url);
+              mark("imdb_to_tmdb_done", { ok: response.ok });
               if (response.ok) {
                 const data = yield response.json();
                 if (type === "movie" && ((_a = data.movie_results) == null ? void 0 : _a.length) > 0) tmdbId = data.movie_results[0].id;
@@ -7737,12 +7746,14 @@ var require_guardoserie = __commonJS({
             tmdbId = id.toString().replace("tmdb:", "");
           }
           const showInfo = yield getShowInfo(tmdbId, type === "movie" ? "movie" : "tv");
+          mark("tmdb_showinfo_done", { ok: Boolean(showInfo) });
           if (!showInfo) return [];
           const title = showInfo.name || showInfo.original_name || showInfo.title || showInfo.original_title;
           const originalTitle = showInfo.original_title || showInfo.original_name;
           const year = (showInfo.first_air_date || showInfo.release_date || "").split("-")[0];
           console.log(`[Guardoserie] Searching for: ${title} / ${originalTitle} (${year})`);
           const searchProvider = (query) => __async(null, null, function* () {
+            const searchStartedAt = Date.now();
             const searchUrl = `${baseUrl}/wp-admin/admin-ajax.php`;
             const body = `s=${encodeURIComponent(query)}&action=searchwp_live_search&swpengine=default&swpquery=${encodeURIComponent(query)}`;
             const response = yield fetch(searchUrl, {
@@ -7759,6 +7770,7 @@ var require_guardoserie = __commonJS({
             if (response.ok) {
               const searchHtml = yield response.text();
               const results = extractSearchResultsFromHtml(searchHtml, baseUrl);
+              mark("search_ajax_done", { q: query, ms: Date.now() - searchStartedAt, results: results.length });
               if (results.length > 0) return results;
             }
             const searchPageUrl = `${baseUrl}/?s=${encodeURIComponent(query)}`;
@@ -7772,7 +7784,9 @@ var require_guardoserie = __commonJS({
             });
             if (!pageRes.ok) return [];
             const pageHtml = yield pageRes.text();
-            return extractSearchResultsFromHtml(pageHtml, baseUrl);
+            const fallbackResults = extractSearchResultsFromHtml(pageHtml, baseUrl);
+            mark("search_fallback_done", { q: query, ms: Date.now() - searchStartedAt, results: fallbackResults.length });
+            return fallbackResults;
           });
           let allResults = [];
           const queries = Array.from(new Set([title, originalTitle].filter((q) => q && q.length > 2)));
@@ -7780,6 +7794,7 @@ var require_guardoserie = __commonJS({
             const res = yield searchProvider(q);
             allResults.push(...res);
           }
+          mark("search_phase_done", { queries: queries.length, results: allResults.length });
           allResults = Array.from(new Map(allResults.map((item) => [item.url, item])).values());
           const nTitle = normalizeTitle(title);
           const nOrig = normalizeTitle(originalTitle || "");
@@ -7817,6 +7832,7 @@ var require_guardoserie = __commonJS({
             const isPartialMatch = matchScore >= 1;
             if (isExactMatch || isPartialMatch) {
               try {
+                const verifyStartedAt = Date.now();
                 const pageRes = yield fetch(result.url, { headers: {
                   "User-Agent": USER_AGENT,
                   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -7825,6 +7841,7 @@ var require_guardoserie = __commonJS({
                 } });
                 if (!pageRes.ok) continue;
                 const pageHtml = yield pageRes.text();
+                mark("result_verify_done", { url: result.url, ms: Date.now() - verifyStartedAt });
                 let foundYear = null;
                 const pubYearMatch = pageHtml.match(/pubblicazione.*?release-year\/(\d{4})/i);
                 if (pubYearMatch) {
@@ -7874,6 +7891,7 @@ var require_guardoserie = __commonJS({
           }
           if (!targetUrl) {
             const guessed = yield guessUrlFromSlug(baseUrl, title, originalTitle);
+            mark("slug_fallback_done", { ok: Boolean(guessed) });
             if (guessed) {
               console.log(`[Guardoserie] Slug fallback matched: ${guessed}`);
               targetUrl = guessed;
@@ -7895,6 +7913,7 @@ var require_guardoserie = __commonJS({
             } });
             const pageHtml = yield pageRes.text();
             const resolvedEpisodeUrl = extractEpisodeUrlFromSeriesPage(pageHtml, season, episode);
+            mark("series_episode_resolve_done", { ok: Boolean(resolvedEpisodeUrl) });
             if (resolvedEpisodeUrl) {
               episodeUrl = resolvedEpisodeUrl;
             } else {
@@ -7910,7 +7929,9 @@ var require_guardoserie = __commonJS({
             "Referer": `${getGuardoserieBaseUrl()}/`
           } });
           const finalHtml = yield finalRes.text();
+          mark("final_page_done");
           let playerLinks = extractPlayerLinksFromHtml(finalHtml);
+          mark("player_links_extracted", { links: playerLinks.length });
           if (playerLinks.length === 0 && /\/serie\//i.test(episodeUrl)) {
             const fallbackEpisodeUrl = extractEpisodeUrlFromSeriesPage(finalHtml, season, episode);
             if (fallbackEpisodeUrl && fallbackEpisodeUrl !== episodeUrl) {
@@ -7927,6 +7948,7 @@ var require_guardoserie = __commonJS({
                 playerLinks = fallbackLinks;
                 episodeUrl = fallbackEpisodeUrl;
               }
+              mark("player_links_fallback_done", { links: playerLinks.length });
             }
           }
           if (playerLinks.length === 0) {
@@ -8023,8 +8045,15 @@ var require_guardoserie = __commonJS({
           }));
           const nestedStreams = yield Promise.all(streamPromises);
           streams = nestedStreams.flat().filter(Boolean);
+          mark("extractors_done", { streams: streams.length });
+          if (STEP_BENCH_ENABLED) {
+            console.log(`[GuardoserieBench] ${JSON.stringify({ id: String(id), type: String(type), totalMs: Date.now() - benchStart, steps: bench })}`);
+          }
           return streams;
         } catch (e) {
+          if (STEP_BENCH_ENABLED) {
+            console.log(`[GuardoserieBench] ${JSON.stringify({ id: String(id), type: String(type), totalMs: Date.now() - benchStart, failed: true, steps: bench, error: (e == null ? void 0 : e.message) || String(e) })}`);
+          }
           console.error(`[Guardoserie] Error:`, e);
           return [];
         }

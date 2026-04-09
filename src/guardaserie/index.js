@@ -41,6 +41,7 @@ const { extractMixDrop, extractDropLoad, extractSuperVideo, extractUqload, extra
 require('../fetch_helper.js');
 const { checkQualityFromPlaylist } = require('../quality_helper.js');
 const { formatStream } = require('../formatter.js');
+const STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || "").trim().toLowerCase() === "1";
 
 function getQualityFromName(qualityStr) {
   if (!qualityStr) return 'Unknown';
@@ -184,6 +185,12 @@ function verifyMoviePlayer(url, targetYear) {
 function getStreams(id, type, season, episode, providerContext = null) {
   if (String(type).toLowerCase() === "movie") return [];
   return __async(this, null, function* () {
+    const benchStart = Date.now();
+    const bench = [];
+    const mark = (step, meta = {}) => {
+      if (!STEP_BENCH_ENABLED) return;
+      bench.push({ step, t: Date.now() - benchStart, ...meta });
+    };
     try {
       let tmdbId = id;
       let imdbId = null;
@@ -196,6 +203,7 @@ function getStreams(id, type, season, episode, providerContext = null) {
       if (id.toString().startsWith("kitsu:") || contextKitsuId) {
         const kitsuId = contextKitsuId || id.toString().split(":")[1];
         const mapped = yield getIdsFromKitsu(kitsuId, season, episode, providerContext);
+        mark("kitsu_mapping_done", { ok: Boolean(mapped && mapped.tmdbId) });
         if (mapped) {
           if (mapped.tmdbId) tmdbId = mapped.tmdbId;
           if (mapped.imdbId) imdbId = mapped.imdbId;
@@ -208,19 +216,18 @@ function getStreams(id, type, season, episode, providerContext = null) {
         }
       } else if (id.toString().startsWith("tt")) {
         imdbId = id.toString();
-        tmdbId = contextTmdbId || (yield getTmdbIdFromImdb(imdbId, type));
+        tmdbId = contextTmdbId || tmdbId;
+        mark("imdb_to_tmdb_done", { ok: true });
       } else if (id.toString().startsWith("tmdb:")) {
         tmdbId = id.toString().replace("tmdb:", "");
       }
 
       if (!imdbId && tmdbId) imdbId = contextImdbId || (yield getImdbId(tmdbId, type));
-
-      let showInfo = tmdbId ? (yield getShowInfo(tmdbId, type)) : null;
-      if (!showInfo && !imdbId) return [];
-      const title = showInfo ? (showInfo.name || showInfo.title) : (imdbId || "Serie TV");
-      const metaYear = showInfo && showInfo.first_air_date ? parseInt(showInfo.first_air_date.split("-")[0]) : null;
+      mark("imdb_resolve_done", { ok: Boolean(imdbId) });
+      if (!imdbId) return [];
 
       let showUrl = null, showHtml = null;
+      let matchedTitle = imdbId;
       if (imdbId) {
         const searchUrl = `${getGuardaserieBaseUrl()}/index.php?do=search&subaction=search&story=${imdbId}`;
         const searchRes = yield fetch(searchUrl, { headers: { "User-Agent": USER_AGENT, "Referer": getGuardaserieBaseUrl() } });
@@ -229,37 +236,19 @@ function getStreams(id, type, season, episode, providerContext = null) {
           const match = /<div class="mlnh-2">\s*<h2>\s*<a href="([^"]+)" title="([^"]+)">/i.exec(searchHtml);
           if (match && !match[2].toUpperCase().includes("[SUB ITA]")) {
             showUrl = match[1].startsWith('/') ? `${getGuardaserieBaseUrl()}${match[1]}` : match[1];
+            matchedTitle = match[2] || imdbId;
             const pageRes = yield fetch(showUrl, { headers: { "User-Agent": USER_AGENT, "Referer": getGuardaserieBaseUrl() } });
             if (pageRes.ok) showHtml = yield pageRes.text();
           }
         }
-      }
-
-      if (!showUrl) {
-         // Fallback title search (simplified for brevity but functional)
-         const searchUrl = `${getGuardaserieBaseUrl()}/index.php?do=search&subaction=search&story=${encodeURIComponent(title)}`;
-         const searchRes = yield fetch(searchUrl, { headers: { "User-Agent": USER_AGENT, "Referer": getGuardaserieBaseUrl() } });
-         if (searchRes.ok) {
-            const searchHtml = yield searchRes.text();
-            const resultRegex = /<div class="mlnh-2">\s*<h2>\s*<a href="([^"]+)" title="([^"]+)">/gi;
-            let match;
-            while ((match = resultRegex.exec(searchHtml)) !== null) {
-                if (!match[2].toUpperCase().includes("[SUB ITA]")) {
-                    showUrl = match[1].startsWith('/') ? `${getGuardaserieBaseUrl()}${match[1]}` : match[1];
-                    const pageRes = yield fetch(showUrl, { headers: { "User-Agent": USER_AGENT, "Referer": getGuardaserieBaseUrl() } });
-                    if (pageRes.ok) {
-                        showHtml = yield pageRes.text();
-                        break;
-                    }
-                }
-            }
-         }
+        mark("search_by_imdb_done", { ok: Boolean(showUrl) });
       }
 
       if (!showUrl || !showHtml) return [];
       const episodeStr = `${effectiveSeason}x${effectiveEpisode}`;
       const episodeMatch = (new RegExp(`data-num="${episodeStr}"`, "i")).exec(showHtml) || (new RegExp(`data-num="${effectiveSeason}x${effectiveEpisode.toString().padStart(2, '0')}"`, "i")).exec(showHtml);
       if (!episodeMatch) return [];
+      mark("episode_match_done", { ok: Boolean(episodeMatch) });
 
       const searchFromIndex = episodeMatch.index;
       const mirrorsStartIndex = showHtml.indexOf('<div class="mirrors">', searchFromIndex);
@@ -277,7 +266,8 @@ function getStreams(id, type, season, episode, providerContext = null) {
       while ((ifm = iframeRegex.exec(showHtml.substring(mirrorsStartIndex, Math.min(showHtml.length, mirrorsEndIndex + 2000)))) !== null) linksSet.add(ifm[1]);
 
       const links = Array.from(linksSet);
-      const displayName = `${title} ${effectiveSeason}x${effectiveEpisode}`;
+      mark("links_extracted", { links: links.length });
+      const displayName = `${matchedTitle} ${effectiveSeason}x${effectiveEpisode}`;
       const streamPromises = links.map((link) => __async(null, null, function* () {
         try {
           if (link.includes("dropload") || link.includes("dr0pstream")) {
@@ -294,8 +284,16 @@ function getStreams(id, type, season, episode, providerContext = null) {
         return null;
       }));
       const results = yield Promise.all(streamPromises);
-      return results.filter(r => r !== null).map(s => formatStream(s, "Guardaserie")).filter(s => s !== null);
+      const finalStreams = results.filter(r => r !== null).map(s => formatStream(s, "Guardaserie")).filter(s => s !== null);
+      mark("extractors_done", { streams: finalStreams.length });
+      if (STEP_BENCH_ENABLED) {
+        console.log(`[GuardaserieBench] ${JSON.stringify({ id: String(id), type: String(type), totalMs: Date.now() - benchStart, steps: bench })}`);
+      }
+      return finalStreams;
     } catch (e) {
+      if (STEP_BENCH_ENABLED) {
+        console.log(`[GuardaserieBench] ${JSON.stringify({ id: String(id), type: String(type), totalMs: Date.now() - benchStart, failed: true, steps: bench, error: e && e.message ? e.message : String(e) })}`);
+      }
       console.error("[Guardaserie] Error:", e);
       return [];
     }
