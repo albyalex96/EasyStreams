@@ -479,15 +479,18 @@ function pickStream(fileData, type, season = 1, episode = 1) {
 }
 function getStreams(id, type, season, episode, providerContext = null) {
   return __async(this, null, function* () {
+    console.log(`[CC] getStreams input -> id=${String(id)} type=${String(type)} season=${String(season)} episode=${String(episode)}`);
     const parsedRequest = parseCompositeSeriesId(id, season, episode);
     id = parsedRequest.normalizedId;
     season = parsedRequest.season;
     episode = parsedRequest.episode;
+    console.log(`[CC] getStreams normalized -> id=${String(id)} type=${String(type)} season=${String(season)} episode=${String(episode)}`);
     let imdbId = String(id || "").trim();
     const providerType = type === "tv" || type === "series" || type === "anime" ? "tv" : "movie";
     if (!imdbId.startsWith("tt")) {
       if (providerContext && providerContext.imdbId && providerContext.imdbId.startsWith("tt")) {
         imdbId = providerContext.imdbId;
+        console.log(`[CC] Using imdbId from providerContext: ${imdbId}`);
       } else {
         try {
           const tmdbId = imdbId.replace(/\D/g, "");
@@ -501,7 +504,10 @@ function getStreams(id, type, season, episode, providerContext = null) {
             const response = yield fetch(externalUrl);
             if (response.ok) {
               const data = yield response.json();
-              if (data.imdb_id) imdbId = data.imdb_id;
+              if (data.imdb_id) {
+                imdbId = data.imdb_id;
+                console.log(`[CC] Resolved TMDB ${tmdbId} -> IMDb ${imdbId}`);
+              }
             }
           }
         } catch (e) {
@@ -642,6 +648,7 @@ function getStreams(id, type, season, episode, providerContext = null) {
         if (detectedQuality) result.quality = detectedQuality;
       }
       results.push(formatStream(result, "CC"));
+      console.log(`[CC] Returning ${results.length} stream(s) for ${movieTitle}`);
       return results;
     } catch (e) {
       console.error("[CC] Error:", e);

@@ -254,10 +254,12 @@ function pickStream(fileData, type, season = 1, episode = 1) {
 }
 
 async function getStreams(id, type, season, episode, providerContext = null) {
+    console.log(`[CC] getStreams input -> id=${String(id)} type=${String(type)} season=${String(season)} episode=${String(episode)}`);
     const parsedRequest = parseCompositeSeriesId(id, season, episode);
     id = parsedRequest.normalizedId;
     season = parsedRequest.season;
     episode = parsedRequest.episode;
+    console.log(`[CC] getStreams normalized -> id=${String(id)} type=${String(type)} season=${String(season)} episode=${String(episode)}`);
 
     let imdbId = String(id || "").trim();
     const providerType = (type === 'tv' || type === 'series' || type === 'anime') ? 'tv' : 'movie';
@@ -267,6 +269,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         // Check if providerContext already has it
         if (providerContext && providerContext.imdbId && providerContext.imdbId.startsWith("tt")) {
             imdbId = providerContext.imdbId;
+            console.log(`[CC] Using imdbId from providerContext: ${imdbId}`);
         } else {
             // Fetch from TMDB API
             try {
@@ -282,7 +285,10 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                     const response = await fetch(externalUrl);
                     if (response.ok) {
                         const data = await response.json();
-                        if (data.imdb_id) imdbId = data.imdb_id;
+                        if (data.imdb_id) {
+                            imdbId = data.imdb_id;
+                            console.log(`[CC] Resolved TMDB ${tmdbId} -> IMDb ${imdbId}`);
+                        }
                     }
                 }
             } catch (e) {
@@ -458,6 +464,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         }
 
         results.push(formatStream(result, "CC"));
+        console.log(`[CC] Returning ${results.length} stream(s) for ${movieTitle}`);
         return results;
 
     } catch (e) {
