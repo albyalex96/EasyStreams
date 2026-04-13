@@ -103,12 +103,16 @@ function rewriteMasterManifest(manifestText, masterUrl) {
 
 /**
  * Converts a string to a Base64 Data URL for M3U8.
+ * Optimized for ExoPlayer by adding a virtual .m3u8 extension.
  */
 function toM3u8DataUrl(content) {
     const base64 = typeof btoa !== 'undefined' 
         ? btoa(unescape(encodeURIComponent(content))) 
         : Buffer.from(content).toString('base64');
-    return `data:application/vnd.apple.mpegurl;base64,${base64}`;
+    
+    // Using application/x-mpegURL and adding #index.m3u8 anchor 
+    // helps ExoPlayer and other players recognize the stream type correctly.
+    return `data:application/x-mpegURL;base64,${base64}#index.m3u8`;
 }
 
 module.exports = {

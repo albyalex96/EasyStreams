@@ -126,8 +126,7 @@ var require_formatter = __commonJS({
       }
       finalHeaders = normalizePlaybackHeaders(finalHeaders);
       const isStreamingCommunityProvider = String(providerName || "").toLowerCase() === "streamingcommunity" || String((stream == null ? void 0 : stream.name) || "").toLowerCase().includes("streamingcommunity");
-      if (isStreamingCommunityProvider) {
-        finalHeaders = void 0;
+      if (isStreamingCommunityProvider && !finalHeaders) {
         delete behaviorHints.proxyHeaders;
         delete behaviorHints.headers;
         delete behaviorHints.notWebReady;

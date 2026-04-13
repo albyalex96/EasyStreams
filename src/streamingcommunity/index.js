@@ -255,6 +255,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         easyProxySourceUrl: url,
         quality: normalizedQuality,
         type: "direct",
+        headers: commonHeaders, // Pass Referer/UA for variant requests
         behaviorHints: {
           notWebReady: false
         }

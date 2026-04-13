@@ -125,8 +125,7 @@ var require_formatter = __commonJS({
       }
       finalHeaders = normalizePlaybackHeaders(finalHeaders);
       const isStreamingCommunityProvider = String(providerName || "").toLowerCase() === "streamingcommunity" || String((stream == null ? void 0 : stream.name) || "").toLowerCase().includes("streamingcommunity");
-      if (isStreamingCommunityProvider) {
-        finalHeaders = void 0;
+      if (isStreamingCommunityProvider && !finalHeaders) {
         delete behaviorHints.proxyHeaders;
         delete behaviorHints.headers;
         delete behaviorHints.notWebReady;
@@ -355,7 +354,7 @@ var require_hls_helper = __commonJS({
     }
     function toM3u8DataUrl2(content) {
       const base64 = typeof btoa !== "undefined" ? btoa(unescape(encodeURIComponent(content))) : Buffer.from(content).toString("base64");
-      return `data:application/vnd.apple.mpegurl;base64,${base64}`;
+      return `data:application/x-mpegURL;base64,${base64}#index.m3u8`;
     }
     module2.exports = {
       rewriteMasterManifest: rewriteMasterManifest2,
@@ -597,6 +596,8 @@ function getStreams(id, type, season, episode, providerContext = null) {
           easyProxySourceUrl: url,
           quality: normalizedQuality,
           type: "direct",
+          headers: commonHeaders,
+          // Pass Referer/UA for variant requests
           behaviorHints: {
             notWebReady: false
           }
