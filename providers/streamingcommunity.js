@@ -286,6 +286,75 @@ var require_quality_helper = __commonJS({
   }
 });
 
+// src/hls_helper.js
+var require_hls_helper = __commonJS({
+  "src/hls_helper.js"(exports2, module2) {
+    function resolveUrl(relative, base) {
+      try {
+        return new URL(relative, base).href;
+      } catch (e) {
+        if (relative.startsWith("http")) return relative;
+        const baseDir = base.substring(0, base.lastIndexOf("/") + 1);
+        return baseDir + relative;
+      }
+    }
+    function rewriteMasterManifest2(manifestText, masterUrl) {
+      if (!manifestText || !manifestText.includes("#EXTM3U")) return manifestText;
+      const lines = manifestText.split(/\r?\n/);
+      const resultLines = [];
+      const variants = [];
+      let currentVariant = null;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        if (line.startsWith("#EXT-X-STREAM-INF:")) {
+          const info = line;
+          const urlLine = lines[i + 1] ? lines[i + 1].trim() : "";
+          if (urlLine && !urlLine.startsWith("#")) {
+            const resolutionMatch = info.match(/RESOLUTION=(\d+)x(\d+)/i);
+            const bandwidthMatch = info.match(/BANDWIDTH=(\d+)/i);
+            const resolution = resolutionMatch ? parseInt(resolutionMatch[2]) : 0;
+            const bandwidth = bandwidthMatch ? parseInt(bandwidthMatch[1]) : 0;
+            variants.push({
+              info,
+              url: resolveUrl(urlLine, masterUrl),
+              resolution,
+              bandwidth,
+              originalIndex: i
+            });
+            i++;
+          }
+        } else if (line.startsWith("#EXT-X-MEDIA:")) {
+          const rewrittenMedia = line.replace(/(URI=")([^"]+)(")/g, (match, prefix, uri, suffix) => {
+            return prefix + resolveUrl(uri, masterUrl) + suffix;
+          });
+          resultLines.push(rewrittenMedia);
+        } else if (line.startsWith("#") && !line.startsWith("#EXT-X-I-FRAME-STREAM-INF")) {
+          resultLines.push(line);
+        }
+      }
+      if (variants.length > 0) {
+        variants.sort((a, b) => {
+          if (b.resolution !== a.resolution) return b.resolution - a.resolution;
+          return b.bandwidth - a.bandwidth;
+        });
+        const best = variants[0];
+        resultLines.push(best.info);
+        resultLines.push(best.url);
+      }
+      return resultLines.join("\n");
+    }
+    function toM3u8DataUrl2(content) {
+      const base64 = typeof btoa !== "undefined" ? btoa(unescape(encodeURIComponent(content))) : Buffer.from(content).toString("base64");
+      return `data:application/vnd.apple.mpegurl;base64,${base64}`;
+    }
+    module2.exports = {
+      rewriteMasterManifest: rewriteMasterManifest2,
+      toM3u8DataUrl: toM3u8DataUrl2
+    };
+  }
+});
+
 // src/streamingcommunity/index.js
 function getStreamingCommunityBaseUrl() {
   return "https://vixsrc.to";
@@ -293,6 +362,7 @@ function getStreamingCommunityBaseUrl() {
 var { formatStream } = require_formatter();
 require_fetch_helper();
 var { checkQualityFromText } = require_quality_helper();
+var { rewriteMasterManifest, toM3u8DataUrl } = require_hls_helper();
 function safeRequire(modulePath) {
   try {
     return require(modulePath);
@@ -470,12 +540,12 @@ function getStreams(id, type, season, episode, providerContext = null) {
       if (tokenMatch && expiresMatch && urlMatch) {
         const token = tokenMatch[1];
         const expires = expiresMatch[1];
-        const baseUrl2 = urlMatch[1];
+        const streamBaseUrl = urlMatch[1];
         let streamUrl;
-        if (baseUrl2.includes("?b=1")) {
-          streamUrl = baseUrl2.replace("?", ".m3u8?") + `&token=${token}&expires=${expires}&h=1&lang=it`;
+        if (streamBaseUrl.includes("?b=1")) {
+          streamUrl = streamBaseUrl.replace("?", ".m3u8?") + `&token=${token}&expires=${expires}&h=1&lang=it`;
         } else {
-          streamUrl = `${baseUrl2}.m3u8?token=${token}&expires=${expires}&h=1&lang=it`;
+          streamUrl = `${streamBaseUrl}.m3u8?token=${token}&expires=${expires}&h=1&lang=it`;
         }
         console.log(`[StreamingCommunity] Found stream URL: ${streamUrl}`);
         let quality = "720p";
@@ -491,6 +561,10 @@ function getStreams(id, type, season, episode, providerContext = null) {
             const originalLanguageItalian = metadata && (metadata.original_language === "it" || metadata.original_language === "ita");
             if (hasItalian || originalLanguageItalian) {
               console.log(`[StreamingCommunity] Verified: Has Italian audio or original language is Italian.`);
+              console.log(`[StreamingCommunity] Rewriting manifest to preserve only highest quality...`);
+              const filteredManifest = rewriteMasterManifest(playlistText, streamUrl);
+              streamUrl = toM3u8DataUrl(filteredManifest);
+              console.log(`[StreamingCommunity] Final Data URL generated.`);
             } else {
               console.log(`[StreamingCommunity] No Italian audio found in playlist and original language is not Italian. Checking GuardaHD/Guardaserie.`);
               const fallbackOk = yield hasGuardaFallbackResults(id, normalizedType, resolvedSeason, episode, providerContext);

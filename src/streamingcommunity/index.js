@@ -5,6 +5,8 @@ function getStreamingCommunityBaseUrl() {
 const { formatStream } = require('../formatter.js');
 require('../fetch_helper.js');
 const { checkQualityFromText } = require('../quality_helper.js');
+const { rewriteMasterManifest, toM3u8DataUrl } = require('../hls_helper.js');
+
 function safeRequire(modulePath) {
   try {
     return require(modulePath);
@@ -59,7 +61,6 @@ function getQualityFromName(qualityStr) {
 
 async function getTmdbId(imdbId, type) {
   const normalizedType = String(type).toLowerCase();
-  // const endpoint = normalizedType === "movie" ? "movie" : "tv"; // Unused
   const findUrl = `https://api.themoviedb.org/3/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`;
   try {
     const response = await fetch(findUrl);
@@ -199,12 +200,12 @@ async function getStreams(id, type, season, episode, providerContext = null) {
     if (tokenMatch && expiresMatch && urlMatch) {
       const token = tokenMatch[1];
       const expires = expiresMatch[1];
-      const baseUrl = urlMatch[1];
+      const streamBaseUrl = urlMatch[1];
       let streamUrl;
-      if (baseUrl.includes("?b=1")) {
-        streamUrl = baseUrl.replace('?', '.m3u8?') + `&token=${token}&expires=${expires}&h=1&lang=it`;
+      if (streamBaseUrl.includes("?b=1")) {
+        streamUrl = streamBaseUrl.replace('?', '.m3u8?') + `&token=${token}&expires=${expires}&h=1&lang=it`;
       } else {
-        streamUrl = `${baseUrl}.m3u8?token=${token}&expires=${expires}&h=1&lang=it`;
+        streamUrl = `${streamBaseUrl}.m3u8?token=${token}&expires=${expires}&h=1&lang=it`;
       }
       console.log(`[StreamingCommunity] Found stream URL: ${streamUrl}`);
 
@@ -215,18 +216,21 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         });
         if (playlistResponse.ok) {
           const playlistText = await playlistResponse.text();
-          // Basic quality detection from playlist content
-          // We specifically look for Italian audio, not subtitles (TYPE=AUDIO)
           const hasItalian = /#EXT-X-MEDIA:TYPE=AUDIO.*(?:LANGUAGE="it"|LANGUAGE="ita"|NAME="Italian"|NAME="Ita")/i.test(playlistText);
 
           const detected = checkQualityFromText(playlistText);
           if (detected) quality = detected;
 
-          // Check if original language is Italian - if so, skip Italian audio verification
           const originalLanguageItalian = metadata && (metadata.original_language === 'it' || metadata.original_language === 'ita');
 
           if (hasItalian || originalLanguageItalian) {
             console.log(`[StreamingCommunity] Verified: Has Italian audio or original language is Italian.`);
+            
+            // Rewrite manifest to keep only the highest quality
+            console.log(`[StreamingCommunity] Rewriting manifest to preserve only highest quality...`);
+            const filteredManifest = rewriteMasterManifest(playlistText, streamUrl);
+            streamUrl = toM3u8DataUrl(filteredManifest);
+            console.log(`[StreamingCommunity] Final Data URL generated.`);
           } else {
             console.log(`[StreamingCommunity] No Italian audio found in playlist and original language is not Italian. Checking GuardaHD/Guardaserie.`);
             const fallbackOk = await hasGuardaFallbackResults(id, normalizedType, resolvedSeason, episode, providerContext);
