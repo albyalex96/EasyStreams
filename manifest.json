@@ -96,7 +96,7 @@
     {
       "id": "easystreams-cc",
       "name": "CinemaCity",
-      "version": "1.0.16",
+      "version": "1.0.17",
       "description": "Movies and Series from CC",
       "resources": ["stream"],
       "contentLanguage": ["it"],

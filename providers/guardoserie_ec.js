@@ -7406,7 +7406,7 @@ var require_guardoserie = __commonJS({
     var { checkQualityFromPlaylist } = require_quality_helper();
     var STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || "").trim().toLowerCase() === "1";
     function getGuardoserieBaseUrl() {
-      return "https://guardoserie.tattoo";
+      return "https://guardoserie.team";
     }
     var TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
     function getMappingApiUrl() {
@@ -7833,12 +7833,14 @@ var require_guardoserie = __commonJS({
             if (isExactMatch || isPartialMatch) {
               try {
                 const verifyStartedAt = Date.now();
-                const pageRes = yield fetch(result.url, { headers: {
-                  "User-Agent": USER_AGENT,
-                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                  "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-                  "Referer": `${getGuardoserieBaseUrl()}/`
-                } });
+                const pageRes = yield fetch(result.url, {
+                  headers: {
+                    "User-Agent": USER_AGENT,
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "Referer": `${getGuardoserieBaseUrl()}/`
+                  }
+                });
                 if (!pageRes.ok) continue;
                 const pageHtml = yield pageRes.text();
                 mark("result_verify_done", { url: result.url, ms: Date.now() - verifyStartedAt });
@@ -7905,12 +7907,14 @@ var require_guardoserie = __commonJS({
           if (type === "tv" || type === "series") {
             season = effectiveSeason;
             episode = effectiveEpisode;
-            const pageRes = yield fetch(targetUrl, { headers: {
-              "User-Agent": USER_AGENT,
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-              "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-              "Referer": `${getGuardoserieBaseUrl()}/`
-            } });
+            const pageRes = yield fetch(targetUrl, {
+              headers: {
+                "User-Agent": USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Referer": `${getGuardoserieBaseUrl()}/`
+              }
+            });
             const pageHtml = yield pageRes.text();
             const resolvedEpisodeUrl = extractEpisodeUrlFromSeriesPage(pageHtml, season, episode);
             mark("series_episode_resolve_done", { ok: Boolean(resolvedEpisodeUrl) });
@@ -7922,12 +7926,14 @@ var require_guardoserie = __commonJS({
             }
           }
           console.log(`[Guardoserie] Found episode/movie URL: ${episodeUrl}`);
-          const finalRes = yield fetch(episodeUrl, { headers: {
-            "User-Agent": USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": `${getGuardoserieBaseUrl()}/`
-          } });
+          const finalRes = yield fetch(episodeUrl, {
+            headers: {
+              "User-Agent": USER_AGENT,
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+              "Referer": `${getGuardoserieBaseUrl()}/`
+            }
+          });
           const finalHtml = yield finalRes.text();
           mark("final_page_done");
           let playerLinks = extractPlayerLinksFromHtml(finalHtml);
@@ -7936,12 +7942,14 @@ var require_guardoserie = __commonJS({
             const fallbackEpisodeUrl = extractEpisodeUrlFromSeriesPage(finalHtml, season, episode);
             if (fallbackEpisodeUrl && fallbackEpisodeUrl !== episodeUrl) {
               console.log(`[Guardoserie] Fallback to derived episode URL: ${fallbackEpisodeUrl}`);
-              const retryRes = yield fetch(fallbackEpisodeUrl, { headers: {
-                "User-Agent": USER_AGENT,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Referer": `${getGuardoserieBaseUrl()}/`
-              } });
+              const retryRes = yield fetch(fallbackEpisodeUrl, {
+                headers: {
+                  "User-Agent": USER_AGENT,
+                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                  "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                  "Referer": `${getGuardoserieBaseUrl()}/`
+                }
+              });
               const retryHtml = yield retryRes.text();
               const fallbackLinks = extractPlayerLinksFromHtml(retryHtml);
               if (fallbackLinks.length > 0) {
