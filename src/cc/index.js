@@ -63,7 +63,7 @@ function getSessionCookies() {
 
 async function searchByImdb(imdbId) {
     const cookies = getSessionCookies();
-    
+
     const trySearch = async (query) => {
         const searchUrl = `${BASE_URL}/index.php?do=search&subaction=search&story=${query}`;
         try {
@@ -78,12 +78,12 @@ async function searchByImdb(imdbId) {
 
             if (!response.ok) return null;
             const html = await response.text();
-            
+
             // DLE search result markers
-            const resultMatch = html.match(/Found\s+(\d+)\s+responses/i) || 
-                               html.match(/Trovat[io]\s+(\d+)\s+risultat[io]/i) ||
-                               html.match(/Query results\s*\d+\s*-\s*(\d+)/i);
-            
+            const resultMatch = html.match(/Found\s+(\d+)\s+responses/i) ||
+                html.match(/Trovat[io]\s+(\d+)\s+risultat[io]/i) ||
+                html.match(/Query results\s*\d+\s*-\s*(\d+)/i);
+
             if (!resultMatch || parseInt(resultMatch[1]) === 0) {
                 // If the query is not in the text and no results found, skip
                 if (!html.includes(query)) return null;
@@ -93,7 +93,7 @@ async function searchByImdb(imdbId) {
             // If we can't find a clear start for results (marker or container), we MUST NOT search the whole page
             let searchArea = "";
             const markerIdx = resultMatch ? html.indexOf(resultMatch[0]) : html.indexOf('id="dle-content"');
-            
+
             if (markerIdx === -1) {
                 // Secondary check for "no results" text to be sure
                 if (html.includes("site search yielded no results") || html.includes("ricerca non ha prodotto risultati")) {
@@ -116,11 +116,11 @@ async function searchByImdb(imdbId) {
             // Find any movie/anime/series/tv-series link in the results
             // We match the full tag to get the title
             const links = [...searchArea.matchAll(/<a[^>]+href=["']((?:https?:\/\/cinemacity\.cc)?\/(?:movies|anime|series|tv-series)\/\d+-[^"']+\.html)["'][^>]*>([\s\S]*?)<\/a>/gi)];
-            
+
             if (links.length > 0) {
                 // The first link after the "Found X responses" marker is almost certainly the correct result
                 let bestMatch = links[0];
-                
+
                 // If we find the query text (or numeric ID) in the search area, pick the link closest to it
                 const queryPos = searchArea.indexOf(query);
                 if (queryPos !== -1) {
@@ -169,7 +169,7 @@ function extractJsonArray(decoded) {
     for (let i = start; i < decoded.length; i++) {
         if (decoded[i] === "[") depth++;
         else if (decoded[i] === "]") depth--;
-        
+
         if (depth === 0) {
             return decoded.substring(start, i + 1);
         }
@@ -235,7 +235,7 @@ function pickStream(fileData, type, season = 1, episode = 1) {
         let selectedSeasonFolder = null;
         for (const s of fileData) {
             if (!s || typeof s !== 'object' || !s.folder) continue;
-            
+
             const title = (s.title || "").toLowerCase();
             // Matches "Season 1", "Stagione 1", "S1", "S 1", "S 01", etc.
             const seasonRegex = new RegExp(`(?:season|stagione|s)\\s*0*${season}\\b`, "i");
@@ -261,7 +261,7 @@ function pickStream(fileData, type, season = 1, episode = 1) {
         let selectedEpisodeFile = null;
         for (const e of selectedSeasonFolder) {
             if (!e || typeof e !== 'object' || !e.file) continue;
-            
+
             const title = (e.title || "").toLowerCase();
             // Matches "Episode 1", "Episodio 1", "E1", "E 1", "E 01", etc.
             const epRegex = new RegExp(`(?:episode|episodio|e)\\s*0*${episode}\\b`, "i");
@@ -309,7 +309,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                     } else {
                         externalUrl = `https://api.themoviedb.org/3/tv/${tmdbId}/external_ids?api_key=${TMDB_API_KEY}`;
                     }
-                    
+
                     const response = await fetchWithTimeout(externalUrl, { timeout: FETCH_TIMEOUT });
                     if (response.ok) {
                         const data = await response.json();
@@ -323,7 +323,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             }
         }
     }
-    
+
     if (!imdbId.startsWith("tt")) {
         return [];
     }
@@ -338,8 +338,8 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         }
 
         const movieUrl = searchResult.url;
-        let movieTitle = (searchResult.title || imdbId).replace(/\s*\(.*?\)\s*/g, '').trim(); 
-        
+        let movieTitle = (searchResult.title || imdbId).replace(/\s*\(.*?\)\s*/g, '').trim();
+
         if (type === 'tv' || type === 'series') {
             movieTitle += ` ${season}x${episode}`;
         }
@@ -398,23 +398,23 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             const encoded = match[1];
             try {
                 // Ignore very short strings
-                if (encoded.length < 50) continue; 
-                
+                if (encoded.length < 50) continue;
+
                 let decoded;
                 try {
                     decoded = base64Decode(encoded);
-                } catch(e) {
+                } catch (e) {
                     continue;
                 }
-                
+
                 if (!decoded) continue;
 
                 // Mechanism A: the decoded payload is the JSON itself
                 if (decoded.trim().startsWith("[")) {
-                   try {
-                       fileData = JSON.parse(decoded);
-                       if (fileData && fileData.length > 0) break;
-                   } catch(e) {}
+                    try {
+                        fileData = JSON.parse(decoded);
+                        if (fileData && fileData.length > 0) break;
+                    } catch (e) { }
                 }
 
                 // Mechanism B: the decoded payload is a JS script containing the JSON in a "file:" property
@@ -427,7 +427,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                     } catch (e) {
                         try {
                             fileData = JSON.parse(rawJson);
-                        } catch(e2) {}
+                        } catch (e2) { }
                     }
                     if (fileData && fileData.length > 0) break;
                 }
@@ -471,7 +471,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             type: "direct",
             headers: streamHeaders,
             behaviorHints: {
-                notWebReady: false
+                notWebReady: true
             }
         };
 

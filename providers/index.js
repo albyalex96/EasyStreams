@@ -11692,21 +11692,45 @@ var require_cc = __commonJS({
     "use strict";
     var { formatStream } = require_formatter();
     var { checkQualityFromPlaylist } = require_quality_helper();
-    var { createTimeoutSignal: createTimeoutSignal2 } = require_fetch_helper();
+    var { fetchWithTimeout } = require_fetch_helper();
+    var BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
     function base64Decode(str) {
       try {
-        if (typeof Buffer !== "undefined") {
-          return Buffer.from(str, "base64").toString("utf8");
-        } else if (typeof atob !== "undefined") {
+        if (typeof atob === "function") {
           return decodeURIComponent(escape(atob(str)));
         }
       } catch (e) {
-        console.error("[CC] Base64 decode error:", e);
       }
-      return "";
+      try {
+        let output = "";
+        let buffer = 0;
+        let bits = 0;
+        const input = String(str || "").replace(/[^A-Za-z0-9+/=]/g, "");
+        for (let i = 0; i < input.length; i++) {
+          const char = input.charAt(i);
+          if (char === "=") break;
+          const value = BASE64_CHARS.indexOf(char);
+          if (value < 0) continue;
+          buffer = buffer << 6 | value;
+          bits += 6;
+          if (bits >= 8) {
+            bits -= 8;
+            output += String.fromCharCode(buffer >> bits & 255);
+          }
+        }
+        try {
+          return decodeURIComponent(escape(output));
+        } catch (e) {
+          return output;
+        }
+      } catch (e) {
+        console.error("[CC] Base64 decode error:", e);
+        return "";
+      }
     }
     var BASE_URL = base64Decode("aHR0cHM6Ly9jaW5lbWFjaXR5LmNj");
     var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    var FETCH_TIMEOUT = 1e4;
     var TMDB_API_KEY2 = "68e094699525b18a70bab2f86b1fa706";
     function getSessionCookies() {
       const cookieB64 = "ZGxlX3VzZXJfaWQ9MzI3Mjk7IGRsZV9wYXNzd29yZD04OTQxNzFjNmE4ZGFiMThlZTU5NGQ1YzY1MjAwOWEzNTs=";
@@ -11717,9 +11741,9 @@ var require_cc = __commonJS({
         const cookies = getSessionCookies();
         const trySearch = (query) => __async(null, null, function* () {
           const searchUrl = `${BASE_URL}/index.php?do=search&subaction=search&story=${query}`;
-          console.log(`[CC] Searching for query: ${query}`);
           try {
-            const response = yield fetch(searchUrl, {
+            const response = yield fetchWithTimeout(searchUrl, {
+              timeout: FETCH_TIMEOUT,
               headers: {
                 "User-Agent": USER_AGENT,
                 "Cookie": cookies || "",
@@ -11817,6 +11841,21 @@ var require_cc = __commonJS({
       }
       return resolveUrl(pageUrl, iframeMatch[1]);
     }
+    function parseCompositeSeriesId(rawId, season, episode) {
+      const parsed = {
+        normalizedId: String(rawId || "").trim(),
+        season: Number.isInteger(season) ? season : Number.parseInt(season, 10) || 1,
+        episode: Number.isInteger(episode) ? episode : Number.parseInt(episode, 10) || 1
+      };
+      const match = parsed.normalizedId.match(/^(tt\d+|\d+|tmdb:\d+):(\d+):(\d+)$/i);
+      if (!match) {
+        return parsed;
+      }
+      parsed.normalizedId = match[1];
+      parsed.season = Number.parseInt(match[2], 10) || parsed.season;
+      parsed.episode = Number.parseInt(match[3], 10) || parsed.episode;
+      return parsed;
+    }
     function pickStream(fileData, type, season = 1, episode = 1) {
       var _a;
       if (typeof fileData === "string") {
@@ -11866,6 +11905,10 @@ var require_cc = __commonJS({
     }
     function getStreams2(id, type, season, episode, providerContext = null) {
       return __async(this, null, function* () {
+        const parsedRequest = parseCompositeSeriesId(id, season, episode);
+        id = parsedRequest.normalizedId;
+        season = parsedRequest.season;
+        episode = parsedRequest.episode;
         let imdbId = String(id || "").trim();
         const providerType = type === "tv" || type === "series" || type === "anime" ? "tv" : "movie";
         if (!imdbId.startsWith("tt")) {
@@ -11881,10 +11924,12 @@ var require_cc = __commonJS({
                 } else {
                   externalUrl = `https://api.themoviedb.org/3/tv/${tmdbId}/external_ids?api_key=${TMDB_API_KEY2}`;
                 }
-                const response = yield fetch(externalUrl);
+                const response = yield fetchWithTimeout(externalUrl, { timeout: FETCH_TIMEOUT });
                 if (response.ok) {
                   const data = yield response.json();
-                  if (data.imdb_id) imdbId = data.imdb_id;
+                  if (data.imdb_id) {
+                    imdbId = data.imdb_id;
+                  }
                 }
               }
             } catch (e) {
@@ -11893,7 +11938,6 @@ var require_cc = __commonJS({
           }
         }
         if (!imdbId.startsWith("tt")) {
-          console.log(`[CC] Could not resolve IMDb ID for TMDB: ${id}. CC requires IMDb ID for searching.`);
           return [];
         }
         try {
@@ -11901,7 +11945,6 @@ var require_cc = __commonJS({
           const proxyUrl = providerContext && providerContext.proxyUrl || (typeof global !== "undefined" && global.CF_PROXY_URL ? global.CF_PROXY_URL : null);
           const searchResult = yield searchByImdb(imdbId);
           if (!searchResult || !searchResult.url) {
-            console.log(`[CC] No results found for IMDb: ${imdbId}`);
             return [];
           }
           const movieUrl = searchResult.url;
@@ -11909,10 +11952,8 @@ var require_cc = __commonJS({
           if (type === "tv" || type === "series") {
             movieTitle += ` ${season}x${episode}`;
           }
-          console.log(`[CC] Found URL and Title: ${movieUrl} (${movieTitle})`);
           if (isStremioAddon) {
             if (!proxyUrl) {
-              console.log(`[CC] Skipping Stremio Addon execution because proxy is not configured.`);
               return [];
             }
             let finalTargetUrl = movieUrl;
@@ -11921,7 +11962,6 @@ var require_cc = __commonJS({
               finalTargetUrl += `${separator}s=${season}&e=${episode}`;
             }
             const extractorUrl = `${proxyUrl}/extractor/video?host=city&url=${encodeURIComponent(finalTargetUrl)}&redirect_stream=true`;
-            console.log(`[CC] Using EasyProxy extractor: ${extractorUrl}`);
             const result2 = {
               name: "CC",
               title: movieTitle,
@@ -11934,9 +11974,9 @@ var require_cc = __commonJS({
             };
             return [formatStream(result2, "CC")];
           }
-          console.log(`[CC] Executing direct HTML extraction for Nuvio plugin...`);
           const cookies = getSessionCookies();
-          const response = yield fetch(movieUrl, {
+          const response = yield fetchWithTimeout(movieUrl, {
+            timeout: FETCH_TIMEOUT,
             headers: {
               "User-Agent": USER_AGENT,
               "Cookie": cookies,
@@ -11993,12 +12033,10 @@ var require_cc = __commonJS({
             }
           }
           if (!fileData) {
-            console.log(`[CC] Could not extract stream info from: ${movieUrl}`);
             return [];
           }
           const streamUrl = pickStream(fileData, type, season, episode);
           if (!streamUrl) return [];
-          console.log(`[CC] Found stream: ${streamUrl}`);
           const results = [];
           const streamHeaders = {
             "User-Agent": USER_AGENT,
@@ -12017,7 +12055,7 @@ var require_cc = __commonJS({
             type: "direct",
             headers: streamHeaders,
             behaviorHints: {
-              notWebReady: false
+              notWebReady: true
             }
           };
           if (streamUrl.includes(".m3u8")) {
