@@ -4,7 +4,7 @@ const { formatStream } = require('../formatter');
 const { checkQualityFromPlaylist } = require('../quality_helper');
 const STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || '').trim().toLowerCase() === '1';
 function getGuardoserieBaseUrl() {
-    return 'https://guardoserie.tattoo';
+    return 'https://guardoserie.team';
 }
 const TMDB_API_KEY = '68e094699525b18a70bab2f86b1fa706';
 function getMappingApiUrl() {
@@ -537,12 +537,14 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                 // Verify year in the page
                 try {
                     const verifyStartedAt = Date.now();
-                    const pageRes = await fetch(result.url, { headers: { 
-                        'User-Agent': USER_AGENT,
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                        'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
-                        'Referer': `${getGuardoserieBaseUrl()}/`
-                    } });
+                    const pageRes = await fetch(result.url, {
+                        headers: {
+                            'User-Agent': USER_AGENT,
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                            'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
+                            'Referer': `${getGuardoserieBaseUrl()}/`
+                        }
+                    });
                     if (!pageRes.ok) continue;
                     const pageHtml = await pageRes.text();
                     mark('result_verify_done', { url: result.url, ms: Date.now() - verifyStartedAt });
@@ -558,9 +560,9 @@ async function getStreams(id, type, season, episode, providerContext = null) {
 
                     // 2. Try meta tags (ISO date)
                     if (!foundYear) {
-                        const metaDateMatch = pageHtml.match(/property="og:updated_time" content="(20\d{2})/i) || 
-                                             pageHtml.match(/itemprop="datePublished" content="(20\d{2})/i) ||
-                                             pageHtml.match(/content="(20\d{2})-\d{2}-\d{2}"/i);
+                        const metaDateMatch = pageHtml.match(/property="og:updated_time" content="(20\d{2})/i) ||
+                            pageHtml.match(/itemprop="datePublished" content="(20\d{2})/i) ||
+                            pageHtml.match(/content="(20\d{2})-\d{2}-\d{2}"/i);
                         if (metaDateMatch) {
                             foundYear = metaDateMatch[1];
                         }
@@ -578,7 +580,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                         const targetYear = parseInt(year);
                         const fYear = parseInt(foundYear);
                         // If exact title match, be very lenient with year (sites often have wrong metadata)
-                        const maxDiff = isExactMatch ? 10 : 1; 
+                        const maxDiff = isExactMatch ? 10 : 1;
                         if (fYear === targetYear || Math.abs(fYear - targetYear) <= maxDiff) {
                             targetUrl = result.url;
                             break;
@@ -627,12 +629,14 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         if (type === 'tv' || type === 'series') {
             season = effectiveSeason;
             episode = effectiveEpisode;
-            const pageRes = await fetch(targetUrl, { headers: { 
-                'User-Agent': USER_AGENT,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Referer': `${getGuardoserieBaseUrl()}/`
-            } });
+            const pageRes = await fetch(targetUrl, {
+                headers: {
+                    'User-Agent': USER_AGENT,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Referer': `${getGuardoserieBaseUrl()}/`
+                }
+            });
             const pageHtml = await pageRes.text();
             const resolvedEpisodeUrl = extractEpisodeUrlFromSeriesPage(pageHtml, season, episode);
             mark('series_episode_resolve_done', { ok: Boolean(resolvedEpisodeUrl) });
@@ -645,12 +649,14 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         }
 
         console.log(`[Guardoserie] Found episode/movie URL: ${episodeUrl}`);
-        const finalRes = await fetch(episodeUrl, { headers: { 
-            'User-Agent': USER_AGENT,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Referer': `${getGuardoserieBaseUrl()}/`
-        } });
+        const finalRes = await fetch(episodeUrl, {
+            headers: {
+                'User-Agent': USER_AGENT,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Referer': `${getGuardoserieBaseUrl()}/`
+            }
+        });
         const finalHtml = await finalRes.text();
         mark('final_page_done');
 
@@ -662,12 +668,14 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             const fallbackEpisodeUrl = extractEpisodeUrlFromSeriesPage(finalHtml, season, episode);
             if (fallbackEpisodeUrl && fallbackEpisodeUrl !== episodeUrl) {
                 console.log(`[Guardoserie] Fallback to derived episode URL: ${fallbackEpisodeUrl}`);
-                const retryRes = await fetch(fallbackEpisodeUrl, { headers: {
-                    'User-Agent': USER_AGENT,
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'Referer': `${getGuardoserieBaseUrl()}/`
-                } });
+                const retryRes = await fetch(fallbackEpisodeUrl, {
+                    headers: {
+                        'User-Agent': USER_AGENT,
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Referer': `${getGuardoserieBaseUrl()}/`
+                    }
+                });
                 const retryHtml = await retryRes.text();
                 const fallbackLinks = extractPlayerLinksFromHtml(retryHtml);
                 if (fallbackLinks.length > 0) {
