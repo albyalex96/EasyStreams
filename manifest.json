@@ -96,7 +96,7 @@
     {
       "id": "easystreams-cc",
       "name": "CC",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "description": "Movies and Series from CC",
       "resources": ["stream"],
       "contentLanguage": ["it"],

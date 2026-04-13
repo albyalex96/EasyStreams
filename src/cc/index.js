@@ -2,20 +2,51 @@
 
 const { formatStream } = require('../formatter.js');
 const { checkQualityFromPlaylist } = require('../quality_helper.js');
-const { createTimeoutSignal } = require('../fetch_helper.js');
+const { fetchWithTimeout } = require('../fetch_helper.js');
 
-// Cross-platform Base64 decoder for Node.js and React Native (Nuvio)
+const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+
+// Cross-platform Base64 decoder for Node.js and React Native (Nuvio/Hermes)
 function base64Decode(str) {
     try {
-        if (typeof Buffer !== 'undefined') {
-            return Buffer.from(str, 'base64').toString('utf8');
-        } else if (typeof atob !== 'undefined') {
+        if (typeof atob === 'function') {
             return decodeURIComponent(escape(atob(str)));
         }
     } catch (e) {
-        console.error("[CC] Base64 decode error:", e);
+        // Fall through to the JS decoder below.
     }
-    return "";
+
+    try {
+        let output = "";
+        let buffer = 0;
+        let bits = 0;
+        const input = String(str || "").replace(/[^A-Za-z0-9+/=]/g, "");
+
+        for (let i = 0; i < input.length; i++) {
+            const char = input.charAt(i);
+            if (char === "=") break;
+
+            const value = BASE64_CHARS.indexOf(char);
+            if (value < 0) continue;
+
+            buffer = (buffer << 6) | value;
+            bits += 6;
+
+            if (bits >= 8) {
+                bits -= 8;
+                output += String.fromCharCode((buffer >> bits) & 0xff);
+            }
+        }
+
+        try {
+            return decodeURIComponent(escape(output));
+        } catch {
+            return output;
+        }
+    } catch (e) {
+        console.error("[CC] Base64 decode error:", e);
+        return "";
+    }
 }
 
 // Obfuscate the base URL to prevent simple string matching
@@ -35,9 +66,9 @@ async function searchByImdb(imdbId) {
     
     const trySearch = async (query) => {
         const searchUrl = `${BASE_URL}/index.php?do=search&subaction=search&story=${query}`;
-        console.log(`[CC] Searching for query: ${query}`);
         try {
-            const response = await fetch(searchUrl, {
+            const response = await fetchWithTimeout(searchUrl, {
+                timeout: FETCH_TIMEOUT,
                 headers: {
                     "User-Agent": USER_AGENT,
                     "Cookie": cookies || "",
@@ -254,12 +285,10 @@ function pickStream(fileData, type, season = 1, episode = 1) {
 }
 
 async function getStreams(id, type, season, episode, providerContext = null) {
-    console.log(`[CC] getStreams input -> id=${String(id)} type=${String(type)} season=${String(season)} episode=${String(episode)}`);
     const parsedRequest = parseCompositeSeriesId(id, season, episode);
     id = parsedRequest.normalizedId;
     season = parsedRequest.season;
     episode = parsedRequest.episode;
-    console.log(`[CC] getStreams normalized -> id=${String(id)} type=${String(type)} season=${String(season)} episode=${String(episode)}`);
 
     let imdbId = String(id || "").trim();
     const providerType = (type === 'tv' || type === 'series' || type === 'anime') ? 'tv' : 'movie';
@@ -269,7 +298,6 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         // Check if providerContext already has it
         if (providerContext && providerContext.imdbId && providerContext.imdbId.startsWith("tt")) {
             imdbId = providerContext.imdbId;
-            console.log(`[CC] Using imdbId from providerContext: ${imdbId}`);
         } else {
             // Fetch from TMDB API
             try {
@@ -282,12 +310,11 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                         externalUrl = `https://api.themoviedb.org/3/tv/${tmdbId}/external_ids?api_key=${TMDB_API_KEY}`;
                     }
                     
-                    const response = await fetch(externalUrl);
+                    const response = await fetchWithTimeout(externalUrl, { timeout: FETCH_TIMEOUT });
                     if (response.ok) {
                         const data = await response.json();
                         if (data.imdb_id) {
                             imdbId = data.imdb_id;
-                            console.log(`[CC] Resolved TMDB ${tmdbId} -> IMDb ${imdbId}`);
                         }
                     }
                 }
@@ -298,7 +325,6 @@ async function getStreams(id, type, season, episode, providerContext = null) {
     }
     
     if (!imdbId.startsWith("tt")) {
-        console.log(`[CC] Could not resolve IMDb ID for TMDB: ${id}. CC requires IMDb ID for searching.`);
         return [];
     }
 
@@ -308,7 +334,6 @@ async function getStreams(id, type, season, episode, providerContext = null) {
 
         const searchResult = await searchByImdb(imdbId);
         if (!searchResult || !searchResult.url) {
-            console.log(`[CC] No results found for IMDb: ${imdbId}`);
             return [];
         }
 
@@ -319,11 +344,8 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             movieTitle += ` ${season}x${episode}`;
         }
 
-        console.log(`[CC] Found URL and Title: ${movieUrl} (${movieTitle})`);
-
         if (isStremioAddon) {
             if (!proxyUrl) {
-                console.log(`[CC] Skipping Stremio Addon execution because proxy is not configured.`);
                 return [];
             }
 
@@ -334,8 +356,6 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             }
 
             const extractorUrl = `${proxyUrl}/extractor/video?host=city&url=${encodeURIComponent(finalTargetUrl)}&redirect_stream=true`;
-
-            console.log(`[CC] Using EasyProxy extractor: ${extractorUrl}`);
 
             const result = {
                 name: "CC",
@@ -352,9 +372,9 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         }
 
         // Logic for Nuvio Plugin (direct HTML extraction)
-        console.log(`[CC] Executing direct HTML extraction for Nuvio plugin...`);
         const cookies = getSessionCookies();
-        const response = await fetch(movieUrl, {
+        const response = await fetchWithTimeout(movieUrl, {
+            timeout: FETCH_TIMEOUT,
             headers: {
                 "User-Agent": USER_AGENT,
                 "Cookie": cookies,
@@ -427,14 +447,11 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         }
 
         if (!fileData) {
-            console.log(`[CC] Could not extract stream info from: ${movieUrl}`);
             return [];
         }
 
         const streamUrl = pickStream(fileData, type, season, episode);
         if (!streamUrl) return [];
-
-        console.log(`[CC] Found stream: ${streamUrl}`);
 
         const results = [];
         const streamHeaders = {
@@ -464,7 +481,6 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         }
 
         results.push(formatStream(result, "CC"));
-        console.log(`[CC] Returning ${results.length} stream(s) for ${movieTitle}`);
         return results;
 
     } catch (e) {

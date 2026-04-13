@@ -172,8 +172,8 @@ var require_formatter = __commonJS({
 // src/fetch_helper.js
 var require_fetch_helper = __commonJS({
   "src/fetch_helper.js"(exports2, module2) {
-    var FETCH_TIMEOUT = 3e4;
-    function createTimeoutSignal2(timeoutMs) {
+    var FETCH_TIMEOUT2 = 3e4;
+    function createTimeoutSignal(timeoutMs) {
       const parsed = Number.parseInt(String(timeoutMs), 10);
       if (!Number.isFinite(parsed) || parsed <= 0) {
         return { signal: void 0, cleanup: null, timed: false };
@@ -194,14 +194,14 @@ var require_fetch_helper = __commonJS({
       }
       return { signal: void 0, cleanup: null, timed: false };
     }
-    function fetchWithTimeout(_0) {
+    function fetchWithTimeout2(_0) {
       return __async(this, arguments, function* (url, options = {}) {
         if (typeof fetch === "undefined") {
           throw new Error("No fetch implementation found!");
         }
         const _a = options, { timeout } = _a, fetchOptions = __objRest(_a, ["timeout"]);
-        const requestTimeout = timeout || FETCH_TIMEOUT;
-        const timeoutConfig = createTimeoutSignal2(requestTimeout);
+        const requestTimeout = timeout || FETCH_TIMEOUT2;
+        const timeoutConfig = createTimeoutSignal(requestTimeout);
         const requestOptions = __spreadValues({}, fetchOptions);
         if (timeoutConfig.signal) {
           if (requestOptions.signal && typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
@@ -225,14 +225,14 @@ var require_fetch_helper = __commonJS({
         }
       });
     }
-    module2.exports = { fetchWithTimeout, createTimeoutSignal: createTimeoutSignal2 };
+    module2.exports = { fetchWithTimeout: fetchWithTimeout2, createTimeoutSignal };
   }
 });
 
 // src/quality_helper.js
 var require_quality_helper = __commonJS({
   "src/quality_helper.js"(exports2, module2) {
-    var { createTimeoutSignal: createTimeoutSignal2 } = require_fetch_helper();
+    var { createTimeoutSignal } = require_fetch_helper();
     var USER_AGENT2 = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
     function checkQualityFromPlaylist2(_0) {
       return __async(this, arguments, function* (url, headers = {}) {
@@ -242,7 +242,7 @@ var require_quality_helper = __commonJS({
           if (!finalHeaders["User-Agent"]) {
             finalHeaders["User-Agent"] = USER_AGENT2;
           }
-          const timeoutConfig = createTimeoutSignal2(3e3);
+          const timeoutConfig = createTimeoutSignal(3e3);
           try {
             const response = yield fetch(url, {
               headers: finalHeaders,
@@ -290,21 +290,45 @@ var require_quality_helper = __commonJS({
 // src/cc/index.js
 var { formatStream } = require_formatter();
 var { checkQualityFromPlaylist } = require_quality_helper();
-var { createTimeoutSignal } = require_fetch_helper();
+var { fetchWithTimeout } = require_fetch_helper();
+var BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 function base64Decode(str) {
   try {
-    if (typeof Buffer !== "undefined") {
-      return Buffer.from(str, "base64").toString("utf8");
-    } else if (typeof atob !== "undefined") {
+    if (typeof atob === "function") {
       return decodeURIComponent(escape(atob(str)));
     }
   } catch (e) {
-    console.error("[CC] Base64 decode error:", e);
   }
-  return "";
+  try {
+    let output = "";
+    let buffer = 0;
+    let bits = 0;
+    const input = String(str || "").replace(/[^A-Za-z0-9+/=]/g, "");
+    for (let i = 0; i < input.length; i++) {
+      const char = input.charAt(i);
+      if (char === "=") break;
+      const value = BASE64_CHARS.indexOf(char);
+      if (value < 0) continue;
+      buffer = buffer << 6 | value;
+      bits += 6;
+      if (bits >= 8) {
+        bits -= 8;
+        output += String.fromCharCode(buffer >> bits & 255);
+      }
+    }
+    try {
+      return decodeURIComponent(escape(output));
+    } catch (e) {
+      return output;
+    }
+  } catch (e) {
+    console.error("[CC] Base64 decode error:", e);
+    return "";
+  }
 }
 var BASE_URL = base64Decode("aHR0cHM6Ly9jaW5lbWFjaXR5LmNj");
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+var FETCH_TIMEOUT = 1e4;
 var TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
 function getSessionCookies() {
   const cookieB64 = "ZGxlX3VzZXJfaWQ9MzI3Mjk7IGRsZV9wYXNzd29yZD04OTQxNzFjNmE4ZGFiMThlZTU5NGQ1YzY1MjAwOWEzNTs=";
@@ -315,9 +339,9 @@ function searchByImdb(imdbId) {
     const cookies = getSessionCookies();
     const trySearch = (query) => __async(null, null, function* () {
       const searchUrl = `${BASE_URL}/index.php?do=search&subaction=search&story=${query}`;
-      console.log(`[CC] Searching for query: ${query}`);
       try {
-        const response = yield fetch(searchUrl, {
+        const response = yield fetchWithTimeout(searchUrl, {
+          timeout: FETCH_TIMEOUT,
           headers: {
             "User-Agent": USER_AGENT,
             "Cookie": cookies || "",
@@ -479,18 +503,15 @@ function pickStream(fileData, type, season = 1, episode = 1) {
 }
 function getStreams(id, type, season, episode, providerContext = null) {
   return __async(this, null, function* () {
-    console.log(`[CC] getStreams input -> id=${String(id)} type=${String(type)} season=${String(season)} episode=${String(episode)}`);
     const parsedRequest = parseCompositeSeriesId(id, season, episode);
     id = parsedRequest.normalizedId;
     season = parsedRequest.season;
     episode = parsedRequest.episode;
-    console.log(`[CC] getStreams normalized -> id=${String(id)} type=${String(type)} season=${String(season)} episode=${String(episode)}`);
     let imdbId = String(id || "").trim();
     const providerType = type === "tv" || type === "series" || type === "anime" ? "tv" : "movie";
     if (!imdbId.startsWith("tt")) {
       if (providerContext && providerContext.imdbId && providerContext.imdbId.startsWith("tt")) {
         imdbId = providerContext.imdbId;
-        console.log(`[CC] Using imdbId from providerContext: ${imdbId}`);
       } else {
         try {
           const tmdbId = imdbId.replace(/\D/g, "");
@@ -501,12 +522,11 @@ function getStreams(id, type, season, episode, providerContext = null) {
             } else {
               externalUrl = `https://api.themoviedb.org/3/tv/${tmdbId}/external_ids?api_key=${TMDB_API_KEY}`;
             }
-            const response = yield fetch(externalUrl);
+            const response = yield fetchWithTimeout(externalUrl, { timeout: FETCH_TIMEOUT });
             if (response.ok) {
               const data = yield response.json();
               if (data.imdb_id) {
                 imdbId = data.imdb_id;
-                console.log(`[CC] Resolved TMDB ${tmdbId} -> IMDb ${imdbId}`);
               }
             }
           }
@@ -516,7 +536,6 @@ function getStreams(id, type, season, episode, providerContext = null) {
       }
     }
     if (!imdbId.startsWith("tt")) {
-      console.log(`[CC] Could not resolve IMDb ID for TMDB: ${id}. CC requires IMDb ID for searching.`);
       return [];
     }
     try {
@@ -524,7 +543,6 @@ function getStreams(id, type, season, episode, providerContext = null) {
       const proxyUrl = providerContext && providerContext.proxyUrl || (typeof global !== "undefined" && global.CF_PROXY_URL ? global.CF_PROXY_URL : null);
       const searchResult = yield searchByImdb(imdbId);
       if (!searchResult || !searchResult.url) {
-        console.log(`[CC] No results found for IMDb: ${imdbId}`);
         return [];
       }
       const movieUrl = searchResult.url;
@@ -532,10 +550,8 @@ function getStreams(id, type, season, episode, providerContext = null) {
       if (type === "tv" || type === "series") {
         movieTitle += ` ${season}x${episode}`;
       }
-      console.log(`[CC] Found URL and Title: ${movieUrl} (${movieTitle})`);
       if (isStremioAddon) {
         if (!proxyUrl) {
-          console.log(`[CC] Skipping Stremio Addon execution because proxy is not configured.`);
           return [];
         }
         let finalTargetUrl = movieUrl;
@@ -544,7 +560,6 @@ function getStreams(id, type, season, episode, providerContext = null) {
           finalTargetUrl += `${separator}s=${season}&e=${episode}`;
         }
         const extractorUrl = `${proxyUrl}/extractor/video?host=city&url=${encodeURIComponent(finalTargetUrl)}&redirect_stream=true`;
-        console.log(`[CC] Using EasyProxy extractor: ${extractorUrl}`);
         const result2 = {
           name: "CC",
           title: movieTitle,
@@ -557,9 +572,9 @@ function getStreams(id, type, season, episode, providerContext = null) {
         };
         return [formatStream(result2, "CC")];
       }
-      console.log(`[CC] Executing direct HTML extraction for Nuvio plugin...`);
       const cookies = getSessionCookies();
-      const response = yield fetch(movieUrl, {
+      const response = yield fetchWithTimeout(movieUrl, {
+        timeout: FETCH_TIMEOUT,
         headers: {
           "User-Agent": USER_AGENT,
           "Cookie": cookies,
@@ -616,12 +631,10 @@ function getStreams(id, type, season, episode, providerContext = null) {
         }
       }
       if (!fileData) {
-        console.log(`[CC] Could not extract stream info from: ${movieUrl}`);
         return [];
       }
       const streamUrl = pickStream(fileData, type, season, episode);
       if (!streamUrl) return [];
-      console.log(`[CC] Found stream: ${streamUrl}`);
       const results = [];
       const streamHeaders = {
         "User-Agent": USER_AGENT,
@@ -648,7 +661,6 @@ function getStreams(id, type, season, episode, providerContext = null) {
         if (detectedQuality) result.quality = detectedQuality;
       }
       results.push(formatStream(result, "CC"));
-      console.log(`[CC] Returning ${results.length} stream(s) for ${movieTitle}`);
       return results;
     } catch (e) {
       console.error("[CC] Error:", e);
