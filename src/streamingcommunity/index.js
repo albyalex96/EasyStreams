@@ -5,7 +5,6 @@ function getStreamingCommunityBaseUrl() {
 const { formatStream } = require('../formatter.js');
 require('../fetch_helper.js');
 const { checkQualityFromText } = require('../quality_helper.js');
-const { rewriteMasterManifest, toM3u8DataUrl } = require('../hls_helper.js');
 
 function safeRequire(modulePath) {
   try {
@@ -201,15 +200,21 @@ async function getStreams(id, type, season, episode, providerContext = null) {
       const token = tokenMatch[1];
       const expires = expiresMatch[1];
       const streamBaseUrl = urlMatch[1];
+      
+      // Standard Vixsrc/StreamingCommunity HLS URL with quality parameters
+      // h=1 is the official parameter for forcing High Definition variants
       let streamUrl;
+      const params = `token=${token}&expires=${expires}&h=1&lang=it`;
+      
       if (streamBaseUrl.includes("?b=1")) {
-        streamUrl = streamBaseUrl.replace('?', '.m3u8?') + `&token=${token}&expires=${expires}&h=1&lang=it`;
+        streamUrl = streamBaseUrl.replace('?', '.m3u8?') + `&${params}`;
       } else {
-        streamUrl = `${streamBaseUrl}.m3u8?token=${token}&expires=${expires}&h=1&lang=it`;
+        streamUrl = `${streamBaseUrl}.m3u8?${params}`;
       }
-      console.log(`[StreamingCommunity] Found stream URL: ${streamUrl}`);
+      
+      console.log(`[StreamingCommunity] Final stream URL: ${streamUrl}`);
 
-      let quality = "720p";
+      let quality = "720p"; // Default
       try {
         const playlistResponse = await fetch(streamUrl, {
           headers: commonHeaders
@@ -217,45 +222,30 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         if (playlistResponse.ok) {
           const playlistText = await playlistResponse.text();
           const hasItalian = /#EXT-X-MEDIA:TYPE=AUDIO.*(?:LANGUAGE="it"|LANGUAGE="ita"|NAME="Italian"|NAME="Ita")/i.test(playlistText);
-
           const detected = checkQualityFromText(playlistText);
           if (detected) quality = detected;
 
           const originalLanguageItalian = metadata && (metadata.original_language === 'it' || metadata.original_language === 'ita');
 
-          if (hasItalian || originalLanguageItalian) {
-            console.log(`[StreamingCommunity] Verified: Has Italian audio or original language is Italian.`);
-            
-            // Rewrite manifest to keep only the highest quality
-            console.log(`[StreamingCommunity] Rewriting manifest to preserve only highest quality...`);
-            const filteredManifest = rewriteMasterManifest(playlistText, streamUrl);
-            streamUrl = toM3u8DataUrl(filteredManifest);
-            console.log(`[StreamingCommunity] Final Data URL generated.`);
-          } else {
-            console.log(`[StreamingCommunity] No Italian audio found in playlist and original language is not Italian. Checking GuardaHD/Guardaserie.`);
+          if (!hasItalian && !originalLanguageItalian) {
+            console.log(`[StreamingCommunity] No Italian audio found. Checking fallback.`);
             const fallbackOk = await hasGuardaFallbackResults(id, normalizedType, resolvedSeason, episode, providerContext);
-            if (!fallbackOk) {
-              console.log(`[StreamingCommunity] Skipping non-Italian stream: no GuardaHD/Guardaserie results.`);
-              return [];
-            }
-            console.log(`[StreamingCommunity] Allowing non-Italian stream because GuardaHD/Guardaserie returned results.`);
+            if (!fallbackOk) return [];
           }
-        } else {
-          console.warn(`[StreamingCommunity] Playlist check failed (${playlistResponse.status}), skipping verification.`);
         }
-      } catch (verError) {
-        console.warn(`[StreamingCommunity] Playlist check error, returning anyway:`, verError);
+      } catch (e) {
+        console.warn(`[StreamingCommunity] Playlist pre-check failed, continuing:`, e);
       }
 
       const normalizedQuality = getQualityFromName(quality);
       const result = {
         name: `StreamingCommunity`,
         title: finalDisplayName,
-        url: streamUrl,
+        url: streamUrl, // "Real" URL for maximum compatibility
         easyProxySourceUrl: url,
         quality: normalizedQuality,
         type: "direct",
-        headers: commonHeaders, // Pass Referer/UA for variant requests
+        headers: commonHeaders,
         behaviorHints: {
           notWebReady: false
         }
