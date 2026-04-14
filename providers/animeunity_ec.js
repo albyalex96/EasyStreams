@@ -7485,6 +7485,19 @@ var require_animeunity = __commonJS({
         return null;
       }
     }
+    function getProxySafeSourceUrl(rawUrl) {
+      const absolute = toAbsoluteUrl(rawUrl);
+      if (!absolute) return null;
+      try {
+        const parsed = new URL(absolute);
+        if (/(\.|^)vixcloud\./i.test(parsed.hostname)) {
+          return `${parsed.origin}${parsed.pathname}`;
+        }
+      } catch (e) {
+        return absolute;
+      }
+      return absolute;
+    }
     function normalizeAnimePath(pathOrUrl) {
       if (!pathOrUrl) return null;
       let value = String(pathOrUrl).trim();
@@ -8394,11 +8407,12 @@ var require_animeunity = __commonJS({
               embedUrl2 = toAbsoluteUrl(String(embedPayload || "").trim());
             }
             if (embedUrl2 && /^https?:\/\//i.test(embedUrl2)) {
+              const proxySourceUrl = getProxySafeSourceUrl(embedUrl2) || embedUrl2;
               const vixStreams = yield extractVixCloud(embedUrl2);
               if (Array.isArray(vixStreams) && vixStreams.length > 0) {
                 streams.push(
                   ...vixStreams.map((stream) => __spreadProps(__spreadValues({}, stream), {
-                    easyProxySourceUrl: embedUrl2,
+                    easyProxySourceUrl: proxySourceUrl,
                     name: `AnimeUnity - VixCloud${labelSuffix}`,
                     title: displayTitle,
                     language: stream.language || streamLanguage
