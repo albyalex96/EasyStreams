@@ -413,7 +413,7 @@ function buildEasyProxyExtractorUrl(easyProxyUrl, easyProxyPassword, host, strea
     const normalizedStreamUrl = String(streamUrl || '').trim();
     if (!proxyBaseUrl || !normalizedHost || !normalizedStreamUrl) return normalizedStreamUrl;
     const passwordQuery = proxyPassword ? `&api_password=${encodeURIComponent(proxyPassword)}` : '';
-    return `${proxyBaseUrl}/extractor/video?host=${encodeURIComponent(normalizedHost)}&url=${encodeURIComponent(normalizedStreamUrl)}&redirect_stream=true${passwordQuery}`;
+    return `${proxyBaseUrl}/extractor/video.m3u8?host=${encodeURIComponent(normalizedHost)}&url=${encodeURIComponent(normalizedStreamUrl)}&redirect_stream=true${passwordQuery}`;
 }
 
 function isMixdropStreamUrl(streamUrl) {
