@@ -11688,9 +11688,9 @@ var require_animesaturn = __commonJS({
   }
 });
 
-// src/cc/index.js
-var require_cc = __commonJS({
-  "src/cc/index.js"(exports2, module2) {
+// src/cinemacity/index.js
+var require_cinemacity = __commonJS({
+  "src/cinemacity/index.js"(exports2, module2) {
     "use strict";
     var { formatStream } = require_formatter();
     var { checkQualityFromPlaylist } = require_quality_helper();
@@ -11726,7 +11726,7 @@ var require_cc = __commonJS({
           return output;
         }
       } catch (e) {
-        console.error("[CC] Base64 decode error:", e);
+        console.error("[CinemaCity] Base64 decode error:", e);
         return "";
       }
     }
@@ -11734,9 +11734,67 @@ var require_cc = __commonJS({
     var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     var FETCH_TIMEOUT = 1e4;
     var TMDB_API_KEY2 = "68e094699525b18a70bab2f86b1fa706";
+    function getMappingApiUrl() {
+      return "https://animemapping.realbestia.com";
+    }
+    function normalizeConfigBoolean(value) {
+      if (value === true) return true;
+      const normalized = String(value || "").trim().toLowerCase();
+      return ["1", "true", "yes", "on", "enabled", "checked"].includes(normalized);
+    }
+    function getMappingLanguage(providerContext = null) {
+      const explicit = String((providerContext == null ? void 0 : providerContext.mappingLanguage) || "").trim().toLowerCase();
+      if (explicit === "it") return "it";
+      return normalizeConfigBoolean(providerContext == null ? void 0 : providerContext.easyCatalogsLangIt) ? "it" : null;
+    }
     function getSessionCookies() {
       const cookieB64 = "ZGxlX3VzZXJfaWQ9MzI3Mjk7IGRsZV9wYXNzd29yZD04OTQxNzFjNmE4ZGFiMThlZTU5NGQ1YzY1MjAwOWEzNTs=";
       return base64Decode(cookieB64);
+    }
+    function getIdsFromKitsu(kitsuId, season, episode, providerContext = null) {
+      return __async(this, null, function* () {
+        try {
+          if (!kitsuId) return null;
+          const params = new URLSearchParams();
+          const parsedEpisode = Number.parseInt(String(episode || ""), 10);
+          const parsedSeason = Number.parseInt(String(season || ""), 10);
+          params.set("ep", Number.isInteger(parsedEpisode) && parsedEpisode > 0 ? String(parsedEpisode) : "1");
+          if (Number.isInteger(parsedSeason) && parsedSeason >= 0) {
+            params.set("s", String(parsedSeason));
+          }
+          const mappingLanguage = getMappingLanguage(providerContext);
+          if (mappingLanguage) {
+            params.set("lang", mappingLanguage);
+          }
+          const url = `${getMappingApiUrl()}/kitsu/${encodeURIComponent(String(kitsuId).trim())}?${params.toString()}`;
+          const response = yield fetchWithTimeout(url, { timeout: FETCH_TIMEOUT });
+          if (!response.ok) return null;
+          const payload = yield response.json();
+          const ids = payload && payload.mappings && payload.mappings.ids ? payload.mappings.ids : {};
+          const tmdbEpisode = payload && payload.mappings && (payload.mappings.tmdb_episode || payload.mappings.tmdbEpisode) || payload && (payload.tmdb_episode || payload.tmdbEpisode) || null;
+          const tmdbId = ids && /^\d+$/.test(String(ids.tmdb || "").trim()) ? String(ids.tmdb).trim() : null;
+          const imdbId = ids && /^tt\d+$/i.test(String(ids.imdb || "").trim()) ? String(ids.imdb).trim() : null;
+          const mappedSeason = Number.parseInt(String(
+            tmdbEpisode && (tmdbEpisode.season || tmdbEpisode.seasonNumber || tmdbEpisode.season_number) || ""
+          ), 10);
+          const mappedEpisode = Number.parseInt(String(
+            tmdbEpisode && (tmdbEpisode.episode || tmdbEpisode.episodeNumber || tmdbEpisode.episode_number) || ""
+          ), 10);
+          const rawEpisodeNumber = Number.parseInt(String(
+            tmdbEpisode && (tmdbEpisode.rawEpisodeNumber || tmdbEpisode.raw_episode_number || tmdbEpisode.rawEpisode) || ""
+          ), 10);
+          return {
+            tmdbId,
+            imdbId,
+            mappedSeason: Number.isInteger(mappedSeason) && mappedSeason > 0 ? mappedSeason : null,
+            mappedEpisode: Number.isInteger(mappedEpisode) && mappedEpisode > 0 ? mappedEpisode : null,
+            rawEpisodeNumber: Number.isInteger(rawEpisodeNumber) && rawEpisodeNumber > 0 ? rawEpisodeNumber : null
+          };
+        } catch (e) {
+          console.error("[CinemaCity] Kitsu mapping error:", e);
+          return null;
+        }
+      });
     }
     function searchByImdb(imdbId) {
       return __async(this, null, function* () {
@@ -11793,7 +11851,7 @@ var require_cc = __commonJS({
               return { url: bestLink, title: bestTitle };
             }
           } catch (e) {
-            console.error(`[CC] Search error for ${query}:`, e);
+            console.error(`[CinemaCity] Search error for ${query}:`, e);
           }
           return null;
         });
@@ -11913,6 +11971,33 @@ var require_cc = __commonJS({
         episode = parsedRequest.episode;
         let imdbId = String(id || "").trim();
         const providerType = type === "tv" || type === "series" || type === "anime" ? "tv" : "movie";
+        const contextTmdbId = providerContext && /^\d+$/.test(String(providerContext.tmdbId || "")) ? String(providerContext.tmdbId) : null;
+        const contextImdbId = providerContext && /^tt\d+$/i.test(String(providerContext.imdbId || "")) ? String(providerContext.imdbId) : null;
+        const contextKitsuId = providerContext && /^\d+$/.test(String(providerContext.kitsuId || "")) ? String(providerContext.kitsuId) : null;
+        const shouldIncludeSeasonHintForKitsu = providerContext && providerContext.seasonProvided === true;
+        if (imdbId.startsWith("kitsu:") || contextKitsuId) {
+          const kitsuId = contextKitsuId || ((imdbId.match(/^kitsu:(\d+)/i) || [])[1] || null);
+          const seasonHintForKitsu = shouldIncludeSeasonHintForKitsu ? season : null;
+          const mapped = kitsuId ? yield getIdsFromKitsu(kitsuId, seasonHintForKitsu, episode, providerContext) : null;
+          if (mapped) {
+            if (mapped.imdbId) {
+              imdbId = mapped.imdbId;
+            } else if (mapped.tmdbId) {
+              imdbId = mapped.tmdbId;
+            }
+            if (mapped.mappedSeason && mapped.mappedEpisode) {
+              season = mapped.mappedSeason;
+              episode = mapped.mappedEpisode;
+            } else if (mapped.rawEpisodeNumber) {
+              episode = mapped.rawEpisodeNumber;
+            }
+          }
+        }
+        if (!imdbId.startsWith("tt") && contextImdbId) {
+          imdbId = contextImdbId;
+        } else if (!/^\d+$/.test(imdbId) && contextTmdbId) {
+          imdbId = contextTmdbId;
+        }
         if (!imdbId.startsWith("tt")) {
           if (providerContext && providerContext.imdbId && providerContext.imdbId.startsWith("tt")) {
             imdbId = providerContext.imdbId;
@@ -11935,7 +12020,7 @@ var require_cc = __commonJS({
                 }
               }
             } catch (e) {
-              console.error("[CC] TMDB to IMDb resolution error:", e);
+              console.error("[CinemaCity] TMDB to IMDb resolution error:", e);
             }
           }
         }
@@ -11974,7 +12059,7 @@ var require_cc = __commonJS({
                 notWebReady: true
               }
             };
-            return [formatStream(result2, "CC")];
+            return [formatStream(result2, "CinemaCity")];
           }
           const cookies = getSessionCookies();
           const response = yield fetchWithTimeout(movieUrl, {
@@ -12064,10 +12149,10 @@ var require_cc = __commonJS({
             const detectedQuality = yield checkQualityFromPlaylist(streamUrl, result.headers);
             if (detectedQuality) result.quality = detectedQuality;
           }
-          results.push(formatStream(result, "CC"));
+          results.push(formatStream(result, "CinemaCity"));
           return results;
         } catch (e) {
-          console.error("[CC] Error:", e);
+          console.error("[CinemaCity] Error:", e);
           return [];
         }
       });
@@ -12084,7 +12169,7 @@ var streamingcommunity = require_streamingcommunity();
 var animeunity = require_animeunity();
 var animeworld = require_animeworld();
 var animesaturn = require_animesaturn();
-var cc = require_cc();
+var cinemacity = require_cinemacity();
 var { createTimeoutSignal } = require_fetch_helper();
 var TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
 var CONTEXT_TIMEOUT = 3e3;
@@ -12215,7 +12300,7 @@ function getStreams(id, type, season, episode) {
       if (likelyAnime || isKitsuRequest) {
         selectedProviders.push("animeunity", "animeworld", "animesaturn", "guardoserie", "streamingcommunity", "guardahd");
       } else {
-        selectedProviders.push("streamingcommunity", "guardahd", "guardoserie", "cc");
+        selectedProviders.push("streamingcommunity", "guardahd", "guardoserie", "cinemacity");
       }
     } else if (normalizedType === "anime") {
       selectedProviders.push("animeunity", "animeworld", "animesaturn", "guardaserie", "guardoserie");
@@ -12224,13 +12309,13 @@ function getStreams(id, type, season, episode) {
         selectedProviders.push("animeunity", "animeworld", "animesaturn", "guardaserie", "guardoserie");
       } else {
         if (isImdbRequest) {
-          selectedProviders.push("streamingcommunity", "guardaserie", "guardoserie", "cc");
+          selectedProviders.push("streamingcommunity", "guardaserie", "guardoserie", "cinemacity");
         } else {
           selectedProviders.push("streamingcommunity", "guardaserie", "guardoserie", "animeunity", "animeworld", "animesaturn");
         }
       }
     } else {
-      selectedProviders.push("streamingcommunity", "guardahd", "guardoserie", "cc");
+      selectedProviders.push("streamingcommunity", "guardahd", "guardoserie", "cinemacity");
     }
     for (const providerName of [...new Set(selectedProviders)]) {
       if (providerName === "streamingcommunity") {
@@ -12274,9 +12359,9 @@ function getStreams(id, type, season, episode) {
           guardoserie.getStreams(id, normalizedType, effectiveSeason, normalizedEpisode, sharedContext).then((s) => ({ provider: "Guardoserie", streams: s, status: "fulfilled" })).catch((e) => ({ provider: "Guardoserie", error: e, status: "rejected" }))
         );
       }
-      if (providerName === "cc") {
+      if (providerName === "cinemacity") {
         promises.push(
-          cc.getStreams(id, normalizedType, effectiveSeason, normalizedEpisode, sharedContext).then((s) => ({ provider: "CC", streams: s, status: "fulfilled" })).catch((e) => ({ provider: "CC", error: e, status: "rejected" }))
+          cinemacity.getStreams(id, normalizedType, effectiveSeason, normalizedEpisode, sharedContext).then((s) => ({ provider: "CinemaCity", streams: s, status: "fulfilled" })).catch((e) => ({ provider: "CinemaCity", error: e, status: "rejected" }))
         );
       }
     }

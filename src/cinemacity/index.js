@@ -44,7 +44,7 @@ function base64Decode(str) {
             return output;
         }
     } catch (e) {
-        console.error("[CC] Base64 decode error:", e);
+        console.error("[CinemaCity] Base64 decode error:", e);
         return "";
     }
 }
@@ -55,10 +55,78 @@ const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 const FETCH_TIMEOUT = 10000;
 const TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
 
+function getMappingApiUrl() {
+    return "https://animemapping.realbestia.com";
+}
+
+function normalizeConfigBoolean(value) {
+    if (value === true) return true;
+    const normalized = String(value || "").trim().toLowerCase();
+    return ["1", "true", "yes", "on", "enabled", "checked"].includes(normalized);
+}
+
+function getMappingLanguage(providerContext = null) {
+    const explicit = String(providerContext?.mappingLanguage || "").trim().toLowerCase();
+    if (explicit === "it") return "it";
+    return normalizeConfigBoolean(providerContext?.easyCatalogsLangIt) ? "it" : null;
+}
+
 // Static auth cookie for DLE engine
 function getSessionCookies() {
     const cookieB64 = "ZGxlX3VzZXJfaWQ9MzI3Mjk7IGRsZV9wYXNzd29yZD04OTQxNzFjNmE4ZGFiMThlZTU5NGQ1YzY1MjAwOWEzNTs=";
     return base64Decode(cookieB64);
+}
+
+async function getIdsFromKitsu(kitsuId, season, episode, providerContext = null) {
+    try {
+        if (!kitsuId) return null;
+
+        const params = new URLSearchParams();
+        const parsedEpisode = Number.parseInt(String(episode || ""), 10);
+        const parsedSeason = Number.parseInt(String(season || ""), 10);
+        params.set("ep", Number.isInteger(parsedEpisode) && parsedEpisode > 0 ? String(parsedEpisode) : "1");
+        if (Number.isInteger(parsedSeason) && parsedSeason >= 0) {
+            params.set("s", String(parsedSeason));
+        }
+
+        const mappingLanguage = getMappingLanguage(providerContext);
+        if (mappingLanguage) {
+            params.set("lang", mappingLanguage);
+        }
+
+        const url = `${getMappingApiUrl()}/kitsu/${encodeURIComponent(String(kitsuId).trim())}?${params.toString()}`;
+        const response = await fetchWithTimeout(url, { timeout: FETCH_TIMEOUT });
+        if (!response.ok) return null;
+
+        const payload = await response.json();
+        const ids = payload && payload.mappings && payload.mappings.ids ? payload.mappings.ids : {};
+        const tmdbEpisode =
+            (payload && payload.mappings && (payload.mappings.tmdb_episode || payload.mappings.tmdbEpisode)) ||
+            (payload && (payload.tmdb_episode || payload.tmdbEpisode)) ||
+            null;
+        const tmdbId = ids && /^\d+$/.test(String(ids.tmdb || "").trim()) ? String(ids.tmdb).trim() : null;
+        const imdbId = ids && /^tt\d+$/i.test(String(ids.imdb || "").trim()) ? String(ids.imdb).trim() : null;
+        const mappedSeason = Number.parseInt(String(
+            tmdbEpisode && (tmdbEpisode.season || tmdbEpisode.seasonNumber || tmdbEpisode.season_number) || ""
+        ), 10);
+        const mappedEpisode = Number.parseInt(String(
+            tmdbEpisode && (tmdbEpisode.episode || tmdbEpisode.episodeNumber || tmdbEpisode.episode_number) || ""
+        ), 10);
+        const rawEpisodeNumber = Number.parseInt(String(
+            tmdbEpisode && (tmdbEpisode.rawEpisodeNumber || tmdbEpisode.raw_episode_number || tmdbEpisode.rawEpisode) || ""
+        ), 10);
+
+        return {
+            tmdbId,
+            imdbId,
+            mappedSeason: Number.isInteger(mappedSeason) && mappedSeason > 0 ? mappedSeason : null,
+            mappedEpisode: Number.isInteger(mappedEpisode) && mappedEpisode > 0 ? mappedEpisode : null,
+            rawEpisodeNumber: Number.isInteger(rawEpisodeNumber) && rawEpisodeNumber > 0 ? rawEpisodeNumber : null
+        };
+    } catch (e) {
+        console.error("[CinemaCity] Kitsu mapping error:", e);
+        return null;
+    }
 }
 
 async function searchByImdb(imdbId) {
@@ -141,7 +209,7 @@ async function searchByImdb(imdbId) {
                 return { url: bestLink, title: bestTitle };
             }
         } catch (e) {
-            console.error(`[CC] Search error for ${query}:`, e);
+            console.error(`[CinemaCity] Search error for ${query}:`, e);
         }
         return null;
     };
@@ -292,6 +360,46 @@ async function getStreams(id, type, season, episode, providerContext = null) {
 
     let imdbId = String(id || "").trim();
     const providerType = (type === 'tv' || type === 'series' || type === 'anime') ? 'tv' : 'movie';
+    const contextTmdbId = providerContext && /^\d+$/.test(String(providerContext.tmdbId || ""))
+        ? String(providerContext.tmdbId)
+        : null;
+    const contextImdbId = providerContext && /^tt\d+$/i.test(String(providerContext.imdbId || ""))
+        ? String(providerContext.imdbId)
+        : null;
+    const contextKitsuId = providerContext && /^\d+$/.test(String(providerContext.kitsuId || ""))
+        ? String(providerContext.kitsuId)
+        : null;
+    const shouldIncludeSeasonHintForKitsu =
+        providerContext && providerContext.seasonProvided === true;
+
+    if (imdbId.startsWith("kitsu:") || contextKitsuId) {
+        const kitsuId =
+            contextKitsuId ||
+            (((imdbId.match(/^kitsu:(\d+)/i) || [])[1]) || null);
+        const seasonHintForKitsu = shouldIncludeSeasonHintForKitsu ? season : null;
+        const mapped = kitsuId ? await getIdsFromKitsu(kitsuId, seasonHintForKitsu, episode, providerContext) : null;
+
+        if (mapped) {
+            if (mapped.imdbId) {
+                imdbId = mapped.imdbId;
+            } else if (mapped.tmdbId) {
+                imdbId = mapped.tmdbId;
+            }
+
+            if (mapped.mappedSeason && mapped.mappedEpisode) {
+                season = mapped.mappedSeason;
+                episode = mapped.mappedEpisode;
+            } else if (mapped.rawEpisodeNumber) {
+                episode = mapped.rawEpisodeNumber;
+            }
+        }
+    }
+
+    if (!imdbId.startsWith("tt") && contextImdbId) {
+        imdbId = contextImdbId;
+    } else if (!/^\d+$/.test(imdbId) && contextTmdbId) {
+        imdbId = contextTmdbId;
+    }
 
     // If it's a numeric ID (TMDB), try to resolve IMDb ID
     if (!imdbId.startsWith("tt")) {
@@ -319,7 +427,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                     }
                 }
             } catch (e) {
-                console.error("[CC] TMDB to IMDb resolution error:", e);
+                console.error("[CinemaCity] TMDB to IMDb resolution error:", e);
             }
         }
     }
@@ -368,7 +476,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                 }
             };
 
-            return [formatStream(result, "CC")];
+            return [formatStream(result, "CinemaCity")];
         }
 
         // Logic for Nuvio Plugin (direct HTML extraction)
@@ -480,11 +588,11 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             if (detectedQuality) result.quality = detectedQuality;
         }
 
-        results.push(formatStream(result, "CC"));
+        results.push(formatStream(result, "CinemaCity"));
         return results;
 
     } catch (e) {
-        console.error("[CC] Error:", e);
+        console.error("[CinemaCity] Error:", e);
         return [];
     }
 }

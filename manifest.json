@@ -1,6 +1,6 @@
 {
   "name": "EasyStreams",
-  "version": "1.1.49",
+  "version": "1.1.50",
   "scrapers": [
     {
       "id": "easystreams-guardoserie",
@@ -94,15 +94,15 @@
       "enabled": true
     },
     {
-      "id": "easystreams-cc",
+      "id": "easystreams-cinemacity",
       "name": "CinemaCity",
-      "version": "1.0.17",
-      "description": "Movies and Series from CC",
+      "version": "1.0.18",
+      "description": "Movies and Series from CinemaCity",
       "resources": ["stream"],
       "contentLanguage": ["it"],
       "formats": ["mp4", "m3u8"],
       "idPrefixes": ["tmdb:", "tt"],
-      "filename": "providers/cc.js",
+      "filename": "providers/cinemacity.js",
       "supportedTypes": ["movie", "tv"],
       "enabled": true
     }
