@@ -513,6 +513,22 @@ function getStreams(id, type, season, episode, providerContext = null) {
         console.log("[StreamingCommunity] Could not find embed src in API payload");
         return [];
       }
+      if (providerContext == null ? void 0 : providerContext.proxyUrl) {
+        const rawPageUrl = url.endsWith("/") ? url : `${url}/`;
+        console.log(`[StreamingCommunity] Proxy enabled, returning raw page URL: ${rawPageUrl}`);
+        const result = {
+          name: `StreamingCommunity`,
+          title: finalDisplayName,
+          url: rawPageUrl,
+          easyProxySourceUrl: rawPageUrl,
+          quality: "Unknown",
+          type: "direct",
+          behaviorHints: {
+            notWebReady: false
+          }
+        };
+        return [formatStream(result, "StreamingCommunity")].filter((s) => s !== null);
+      }
       console.log(`[StreamingCommunity] Fetching embed: ${embedUrl}`);
       const embedResponse = yield fetch(embedUrl, {
         headers: getEmbedHeaders(embedUrl)

@@ -249,6 +249,24 @@ async function getStreams(id, type, season, episode, providerContext = null) {
       return [];
     }
 
+    if (providerContext?.proxyUrl) {
+      const rawPageUrl = url.endsWith("/") ? url : `${url}/`;
+      console.log(`[StreamingCommunity] Proxy enabled, returning raw page URL: ${rawPageUrl}`);
+      const result = {
+        name: `StreamingCommunity`,
+        title: finalDisplayName,
+        url: rawPageUrl,
+        easyProxySourceUrl: rawPageUrl,
+        quality: "Unknown",
+        type: "direct",
+        behaviorHints: {
+          notWebReady: false
+        }
+      };
+
+      return [formatStream(result, "StreamingCommunity")].filter(s => s !== null);
+    }
+
     console.log(`[StreamingCommunity] Fetching embed: ${embedUrl}`);
     const embedResponse = await fetch(embedUrl, {
       headers: getEmbedHeaders(embedUrl)
