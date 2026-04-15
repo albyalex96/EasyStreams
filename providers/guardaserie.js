@@ -57,7 +57,7 @@ var __async = (__this, __arguments, generator) => {
 // src/extractors/common.js
 var require_common = __commonJS({
   "src/extractors/common.js"(exports2, module2) {
-    var USER_AGENT2 = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+    var USER_AGENT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
     function getProxiedUrl(url) {
       let proxyUrl = null;
       try {
@@ -96,7 +96,7 @@ var require_common = __commonJS({
       return p;
     }
     module2.exports = {
-      USER_AGENT: USER_AGENT2,
+      USER_AGENT,
       unPack,
       getProxiedUrl
     };
@@ -106,7 +106,7 @@ var require_common = __commonJS({
 // src/extractors/mixdrop.js
 var require_mixdrop = __commonJS({
   "src/extractors/mixdrop.js"(exports2, module2) {
-    var { USER_AGENT: USER_AGENT2, unPack } = require_common();
+    var { USER_AGENT, unPack } = require_common();
     function isMixDropDisabled() {
       if (typeof global !== "undefined" && global && global.DISABLE_MIXDROP === true) {
         return true;
@@ -121,7 +121,7 @@ var require_mixdrop = __commonJS({
           if (url.startsWith("//")) url = "https:" + url;
           const response = yield fetch(url, {
             headers: {
-              "User-Agent": USER_AGENT2,
+              "User-Agent": USER_AGENT,
               "Referer": refererBase
             }
           });
@@ -142,7 +142,7 @@ var require_mixdrop = __commonJS({
               return {
                 url: streamUrl,
                 headers: {
-                  "User-Agent": USER_AGENT2,
+                  "User-Agent": USER_AGENT,
                   "Referer": "https://m1xdrop.net/",
                   "Origin": "https://m1xdrop.net"
                 }
@@ -163,7 +163,7 @@ var require_mixdrop = __commonJS({
 // src/extractors/dropload.js
 var require_dropload = __commonJS({
   "src/extractors/dropload.js"(exports2, module2) {
-    var { USER_AGENT: USER_AGENT2, unPack } = require_common();
+    var { USER_AGENT, unPack } = require_common();
     function extractDropLoad2(url, refererBase = null) {
       return __async(this, null, function* () {
         try {
@@ -174,7 +174,7 @@ var require_dropload = __commonJS({
           }
           const response = yield fetch(url, {
             headers: {
-              "User-Agent": USER_AGENT2,
+              "User-Agent": USER_AGENT,
               "Referer": refererBase
             }
           });
@@ -198,7 +198,7 @@ var require_dropload = __commonJS({
               return {
                 url: streamUrl,
                 headers: {
-                  "User-Agent": USER_AGENT2,
+                  "User-Agent": USER_AGENT,
                   "Referer": url,
                   "Origin": origin
                 }
@@ -221,7 +221,7 @@ var require_dropload = __commonJS({
 // src/extractors/supervideo.js
 var require_supervideo = __commonJS({
   "src/extractors/supervideo.js"(exports2, module2) {
-    var { USER_AGENT: USER_AGENT2, unPack, getProxiedUrl } = require_common();
+    var { USER_AGENT, unPack, getProxiedUrl } = require_common();
     function extractSuperVideo2(url, refererBase = null) {
       return __async(this, null, function* () {
         try {
@@ -232,7 +232,7 @@ var require_supervideo = __commonJS({
           const proxiedUrl = getProxiedUrl(embedUrl);
           let response = yield fetch(proxiedUrl, {
             headers: {
-              "User-Agent": USER_AGENT2,
+              "User-Agent": USER_AGENT,
               "Referer": refererBase
             }
           });
@@ -281,7 +281,7 @@ var require_supervideo = __commonJS({
 // src/extractors/streamtape.js
 var require_streamtape = __commonJS({
   "src/extractors/streamtape.js"(exports2, module2) {
-    var { USER_AGENT: USER_AGENT2 } = require_common();
+    var { USER_AGENT } = require_common();
     function extractStreamTape(url) {
       return __async(this, null, function* () {
         try {
@@ -314,7 +314,7 @@ var require_streamtape = __commonJS({
 // src/extractors/uqload.js
 var require_uqload = __commonJS({
   "src/extractors/uqload.js"(exports2, module2) {
-    var { USER_AGENT: USER_AGENT2 } = require_common();
+    var { USER_AGENT } = require_common();
     function isUqloadDisabled() {
       if (typeof global !== "undefined" && global && global.DISABLE_UQLOAD === true) {
         return true;
@@ -329,7 +329,7 @@ var require_uqload = __commonJS({
           if (url.startsWith("//")) url = "https:" + url;
           const response = yield fetch(url, {
             headers: {
-              "User-Agent": USER_AGENT2,
+              "User-Agent": USER_AGENT,
               "Referer": refererBase
             }
           });
@@ -343,7 +343,7 @@ var require_uqload = __commonJS({
             return {
               url: streamUrl,
               headers: {
-                "User-Agent": USER_AGENT2,
+                "User-Agent": USER_AGENT,
                 "Referer": "https://uqload.io/"
               }
             };
@@ -362,14 +362,14 @@ var require_uqload = __commonJS({
 // src/extractors/upstream.js
 var require_upstream = __commonJS({
   "src/extractors/upstream.js"(exports2, module2) {
-    var { USER_AGENT: USER_AGENT2, unPack } = require_common();
+    var { USER_AGENT, unPack } = require_common();
     function extractUpstream2(url, refererBase = "https://upstream.to/") {
       return __async(this, null, function* () {
         try {
           if (url.startsWith("//")) url = "https:" + url;
           const response = yield fetch(url, {
             headers: {
-              "User-Agent": USER_AGENT2,
+              "User-Agent": USER_AGENT,
               "Referer": refererBase
             }
           });
@@ -390,7 +390,7 @@ var require_upstream = __commonJS({
               return {
                 url: streamUrl,
                 headers: {
-                  "User-Agent": USER_AGENT2,
+                  "User-Agent": USER_AGENT,
                   "Referer": "https://upstream.to/"
                 }
               };
@@ -501,14 +501,14 @@ var require_fetch_helper = __commonJS({
 var require_quality_helper = __commonJS({
   "src/quality_helper.js"(exports2, module2) {
     var { createTimeoutSignal } = require_fetch_helper();
-    var USER_AGENT2 = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
+    var USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
     function checkQualityFromPlaylist2(_0) {
       return __async(this, arguments, function* (url, headers = {}) {
         try {
           if (!url.includes(".m3u8")) return null;
           const finalHeaders = __spreadValues({}, headers);
           if (!finalHeaders["User-Agent"]) {
-            finalHeaders["User-Agent"] = USER_AGENT2;
+            finalHeaders["User-Agent"] = USER_AGENT;
           }
           const timeoutConfig = createTimeoutSignal(3e3);
           try {
@@ -558,14 +558,14 @@ var require_quality_helper = __commonJS({
 // src/extractors/vixcloud.js
 var require_vixcloud = __commonJS({
   "src/extractors/vixcloud.js"(exports2, module2) {
-    var { USER_AGENT: USER_AGENT2 } = require_common();
+    var { USER_AGENT } = require_common();
     var { checkQualityFromPlaylist: checkQualityFromPlaylist2 } = require_quality_helper();
     function extractVixCloud(url) {
       return __async(this, null, function* () {
         try {
           const response = yield fetch(url, {
             headers: {
-              "User-Agent": USER_AGENT2,
+              "User-Agent": USER_AGENT,
               "Referer": "https://vixcloud.co/"
             }
           });
@@ -600,7 +600,7 @@ var require_vixcloud = __commonJS({
             }
             let quality = "Auto";
             const detectedQuality = yield checkQualityFromPlaylist2(finalUrl, {
-              "User-Agent": USER_AGENT2,
+              "User-Agent": USER_AGENT,
               "Referer": "https://vixcloud.co/"
             });
             if (detectedQuality) quality = detectedQuality;
@@ -609,7 +609,7 @@ var require_vixcloud = __commonJS({
               quality,
               type: "m3u8",
               headers: {
-                "User-Agent": USER_AGENT2,
+                "User-Agent": USER_AGENT,
                 "Referer": "https://vixcloud.co/"
               }
             });
@@ -7180,7 +7180,7 @@ var require_crypto_js = __commonJS({
 var require_loadm = __commonJS({
   "src/extractors/loadm.js"(exports2, module2) {
     var CryptoJS = require_crypto_js();
-    var { USER_AGENT: USER_AGENT2 } = require_common();
+    var { USER_AGENT } = require_common();
     function extractLoadm(playerUrl, referer = "guardoserie.horse") {
       return __async(this, null, function* () {
         try {
@@ -7194,7 +7194,7 @@ var require_loadm = __commonJS({
           const queryParams = `id=${encodeURIComponent(id)}&w=2560&h=1440&r=${encodeURIComponent(referer)}`;
           const response = yield fetch(`${apiUrl}?${queryParams}`, {
             headers: {
-              "User-Agent": USER_AGENT2,
+              "User-Agent": USER_AGENT,
               "Referer": baseUrl,
               "X-Requested-With": "XMLHttpRequest"
             }
@@ -7227,7 +7227,7 @@ var require_loadm = __commonJS({
           if (data.source) {
             const playbackHeaders = {
               "Referer": baseUrl,
-              "User-Agent": USER_AGENT2
+              "User-Agent": USER_AGENT
             };
             streams.push({
               name: "Loadm",
@@ -7256,7 +7256,7 @@ var require_loadm = __commonJS({
 // src/extractors/streamhg.js
 var require_streamhg = __commonJS({
   "src/extractors/streamhg.js"(exports2, module2) {
-    var { USER_AGENT: USER_AGENT2, unPack, getProxiedUrl } = require_common();
+    var { USER_AGENT, unPack, getProxiedUrl } = require_common();
     function resolveAbsoluteUrl(candidate, baseUrl) {
       if (!candidate) return null;
       try {
@@ -7274,7 +7274,7 @@ var require_streamhg = __commonJS({
     }
     function getBaseHeaders(referer) {
       const headers = {
-        "User-Agent": USER_AGENT2
+        "User-Agent": USER_AGENT
       };
       if (referer) headers["Referer"] = referer;
       return headers;
@@ -7347,7 +7347,7 @@ var require_extractors = __commonJS({
     var { extractVixCloud } = require_vixcloud();
     var { extractLoadm } = require_loadm();
     var { extractStreamHG } = require_streamhg();
-    var { USER_AGENT: USER_AGENT2, unPack } = require_common();
+    var { USER_AGENT, unPack } = require_common();
     module2.exports = {
       extractMixDrop: extractMixDrop2,
       extractDropLoad: extractDropLoad2,
@@ -7359,7 +7359,7 @@ var require_extractors = __commonJS({
       extractVixCloud,
       extractLoadm,
       extractStreamHG,
-      USER_AGENT: USER_AGENT2,
+      USER_AGENT,
       unPack
     };
   }
@@ -7478,6 +7478,130 @@ var require_formatter = __commonJS({
   }
 });
 
+// cf_bypass.js
+var require_cf_bypass = __commonJS({
+  "cf_bypass.js"(exports2, module2) {
+    var puppeteer = require("puppeteer-extra");
+    var StealthPlugin = require("puppeteer-extra-plugin-stealth");
+    var fs = require("fs");
+    puppeteer.use(StealthPlugin());
+    function getClearance(url, headless = false) {
+      return __async(this, null, function* () {
+        const isDocker = process.env.IN_DOCKER === "true";
+        const effectiveHeadless = isDocker ? false : headless;
+        console.log(`[CF] Avvio browser (Docker: ${isDocker}, Headless: ${effectiveHeadless})...`);
+        const launchOptions = {
+          headless: effectiveHeadless,
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu"
+          ]
+        };
+        if (isDocker) {
+          if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+            launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+          } else if (fs.existsSync("/usr/bin/chromium")) {
+            launchOptions.executablePath = "/usr/bin/chromium";
+          } else if (fs.existsSync("/usr/bin/google-chrome")) {
+            launchOptions.executablePath = "/usr/bin/google-chrome";
+          }
+        }
+        const browser = yield puppeteer.launch(launchOptions);
+        const [page] = yield browser.pages();
+        const ua = yield page.evaluate(() => navigator.userAgent);
+        try {
+          yield page.goto(url, { waitUntil: "domcontentloaded" });
+          for (let i = 0; i < 60; i++) {
+            const cookies = yield page.cookies();
+            const cf = cookies.find((c) => c.name === "cf_clearance");
+            if (cf) {
+              const data = {
+                userAgent: ua,
+                cookies: cookies.map((c) => `${c.name}=${c.value}`).join("; "),
+                cf_clearance: cf.value,
+                timestamp: Date.now()
+              };
+              fs.writeFileSync("cf-session.json", JSON.stringify(data, null, 2));
+              yield browser.close();
+              return data;
+            }
+            try {
+              const frames = page.frames();
+              const cfFrame = frames.find((f) => f.url().includes("turnstile"));
+              if (cfFrame) yield cfFrame.click("#challenge-stage").catch(() => {
+              });
+            } catch (e) {
+            }
+            yield new Promise((r) => setTimeout(r, 1e3));
+          }
+          throw new Error("Bypass timeout");
+        } catch (err) {
+          yield browser.close();
+          throw err;
+        }
+      });
+    }
+    module2.exports = { getClearance };
+  }
+});
+
+// src/utils/cf_handler.js
+var require_cf_handler = __commonJS({
+  "src/utils/cf_handler.js"(exports2, module2) {
+    var axios = require("axios");
+    var fs = require("fs");
+    var path = require("path");
+    var { getClearance } = require_cf_bypass();
+    function smartFetch2(_0, _1) {
+      return __async(this, arguments, function* (url, domain, options = {}) {
+        const sessionFile = path.join(__dirname, "../../cf-session.json");
+        const loadSession = () => {
+          if (fs.existsSync(sessionFile)) {
+            try {
+              return JSON.parse(fs.readFileSync(sessionFile, "utf8"));
+            } catch (e) {
+              return {};
+            }
+          }
+          return {};
+        };
+        let session = loadSession();
+        const doRequest = (sess) => __async(null, null, function* () {
+          const mergedHeaders = __spreadValues({
+            "User-Agent": sess.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Cookie": sess.cookies || "",
+            "Referer": domain + "/",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+          }, options.headers || {});
+          return axios({
+            url,
+            method: options.method || "GET",
+            data: options.body || null,
+            headers: mergedHeaders,
+            timeout: options.timeout || 2e4
+          });
+        });
+        try {
+          const res = yield doRequest(session);
+          return res.data;
+        } catch (err) {
+          if (err.response && (err.response.status === 403 || err.response.status === 503)) {
+            console.warn(`[CF-HANDLER] Blocco rilevato. Avvio bypass per ${domain}...`);
+            const newSession = yield getClearance(domain, false);
+            console.log(`[CF-HANDLER] Bypass riuscito. Riprovo richiesta...`);
+            const retryRes = yield doRequest(newSession);
+            return retryRes.data;
+          }
+          throw err;
+        }
+      });
+    }
+    module2.exports = { smartFetch: smartFetch2 };
+  }
+});
+
 // src/guardaserie/index.js
 var __async2 = (__this, __arguments, generator) => {
   return new Promise((resolve, reject) => {
@@ -7506,11 +7630,11 @@ var TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
 function getMappingApiUrl() {
   return "https://animemapping.realbestia.com";
 }
-var USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
 var { extractMixDrop, extractDropLoad, extractSuperVideo, extractUqload, extractUpstream } = require_extractors();
 require_fetch_helper();
 var { checkQualityFromPlaylist } = require_quality_helper();
 var { formatStream } = require_formatter();
+var { smartFetch } = require_cf_handler();
 var STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || "").trim().toLowerCase() === "1";
 function getQualityFromName(qualityStr) {
   if (!qualityStr) return "Unknown";
@@ -7637,15 +7761,18 @@ function getStreams(id, type, season, episode, providerContext = null) {
       let matchedTitle = imdbId;
       if (imdbId) {
         const searchUrl = `${getGuardaserieBaseUrl()}/index.php?do=search&subaction=search&story=${imdbId}`;
-        const searchRes = yield fetch(searchUrl, { headers: { "User-Agent": USER_AGENT, "Referer": getGuardaserieBaseUrl() } });
-        if (searchRes.ok) {
-          const searchHtml = yield searchRes.text();
+        const searchHtml = yield smartFetch(searchUrl, getGuardaserieBaseUrl(), {
+          headers: { "Referer": getGuardaserieBaseUrl() }
+        });
+        if (searchHtml) {
           const match = /<div class="mlnh-2">\s*<h2>\s*<a href="([^"]+)" title="([^"]+)">/i.exec(searchHtml);
           if (match && !match[2].toUpperCase().includes("[SUB ITA]")) {
             showUrl = match[1].startsWith("/") ? `${getGuardaserieBaseUrl()}${match[1]}` : match[1];
             matchedTitle = match[2] || imdbId;
-            const pageRes = yield fetch(showUrl, { headers: { "User-Agent": USER_AGENT, "Referer": getGuardaserieBaseUrl() } });
-            if (pageRes.ok) showHtml = yield pageRes.text();
+            const pageHtml = yield smartFetch(showUrl, getGuardaserieBaseUrl(), {
+              headers: { "Referer": getGuardaserieBaseUrl() }
+            });
+            if (pageHtml) showHtml = pageHtml;
           }
         }
         mark("search_by_imdb_done", { ok: Boolean(showUrl) });

@@ -104,6 +104,130 @@ var require_common = __commonJS({
   }
 });
 
+// cf_bypass.js
+var require_cf_bypass = __commonJS({
+  "cf_bypass.js"(exports2, module2) {
+    var puppeteer = require("puppeteer-extra");
+    var StealthPlugin = require("puppeteer-extra-plugin-stealth");
+    var fs = require("fs");
+    puppeteer.use(StealthPlugin());
+    function getClearance(url, headless = false) {
+      return __async(this, null, function* () {
+        const isDocker = process.env.IN_DOCKER === "true";
+        const effectiveHeadless = isDocker ? false : headless;
+        console.log(`[CF] Avvio browser (Docker: ${isDocker}, Headless: ${effectiveHeadless})...`);
+        const launchOptions = {
+          headless: effectiveHeadless,
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu"
+          ]
+        };
+        if (isDocker) {
+          if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+            launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+          } else if (fs.existsSync("/usr/bin/chromium")) {
+            launchOptions.executablePath = "/usr/bin/chromium";
+          } else if (fs.existsSync("/usr/bin/google-chrome")) {
+            launchOptions.executablePath = "/usr/bin/google-chrome";
+          }
+        }
+        const browser = yield puppeteer.launch(launchOptions);
+        const [page] = yield browser.pages();
+        const ua = yield page.evaluate(() => navigator.userAgent);
+        try {
+          yield page.goto(url, { waitUntil: "domcontentloaded" });
+          for (let i = 0; i < 60; i++) {
+            const cookies = yield page.cookies();
+            const cf = cookies.find((c) => c.name === "cf_clearance");
+            if (cf) {
+              const data = {
+                userAgent: ua,
+                cookies: cookies.map((c) => `${c.name}=${c.value}`).join("; "),
+                cf_clearance: cf.value,
+                timestamp: Date.now()
+              };
+              fs.writeFileSync("cf-session.json", JSON.stringify(data, null, 2));
+              yield browser.close();
+              return data;
+            }
+            try {
+              const frames = page.frames();
+              const cfFrame = frames.find((f) => f.url().includes("turnstile"));
+              if (cfFrame) yield cfFrame.click("#challenge-stage").catch(() => {
+              });
+            } catch (e) {
+            }
+            yield new Promise((r) => setTimeout(r, 1e3));
+          }
+          throw new Error("Bypass timeout");
+        } catch (err) {
+          yield browser.close();
+          throw err;
+        }
+      });
+    }
+    module2.exports = { getClearance };
+  }
+});
+
+// src/utils/cf_handler.js
+var require_cf_handler = __commonJS({
+  "src/utils/cf_handler.js"(exports2, module2) {
+    var axios = require("axios");
+    var fs = require("fs");
+    var path = require("path");
+    var { getClearance } = require_cf_bypass();
+    function smartFetch(_0, _1) {
+      return __async(this, arguments, function* (url, domain, options = {}) {
+        const sessionFile = path.join(__dirname, "../../cf-session.json");
+        const loadSession = () => {
+          if (fs.existsSync(sessionFile)) {
+            try {
+              return JSON.parse(fs.readFileSync(sessionFile, "utf8"));
+            } catch (e) {
+              return {};
+            }
+          }
+          return {};
+        };
+        let session = loadSession();
+        const doRequest = (sess) => __async(null, null, function* () {
+          const mergedHeaders = __spreadValues({
+            "User-Agent": sess.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Cookie": sess.cookies || "",
+            "Referer": domain + "/",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+          }, options.headers || {});
+          return axios({
+            url,
+            method: options.method || "GET",
+            data: options.body || null,
+            headers: mergedHeaders,
+            timeout: options.timeout || 2e4
+          });
+        });
+        try {
+          const res = yield doRequest(session);
+          return res.data;
+        } catch (err) {
+          if (err.response && (err.response.status === 403 || err.response.status === 503)) {
+            console.warn(`[CF-HANDLER] Blocco rilevato. Avvio bypass per ${domain}...`);
+            const newSession = yield getClearance(domain, false);
+            console.log(`[CF-HANDLER] Bypass riuscito. Riprovo richiesta...`);
+            const retryRes = yield doRequest(newSession);
+            return retryRes.data;
+          }
+          throw err;
+        }
+      });
+    }
+    module2.exports = { smartFetch };
+  }
+});
+
 // src/extractors/mixdrop.js
 var require_mixdrop = __commonJS({
   "src/extractors/mixdrop.js"(exports2, module2) {
@@ -7483,6 +7607,7 @@ var require_formatter = __commonJS({
 var require_guardoserie = __commonJS({
   "src/guardoserie/index.js"(exports2, module2) {
     var { USER_AGENT, getProxiedUrl } = require_common();
+    var { smartFetch } = require_cf_handler();
     var { extractLoadm, extractUqload, extractDropLoad, extractMixDrop, extractSuperVideo } = require_extractors();
     var { formatStream } = require_formatter();
     var { checkQualityFromPlaylist } = require_quality_helper();
@@ -7714,16 +7839,13 @@ var require_guardoserie = __commonJS({
     function tryFetchPageHtml(url) {
       return __async(this, null, function* () {
         if (!url) return null;
-        const proxiedUrl = getProxiedUrl(url);
-        const response = yield fetch(proxiedUrl, {
+        const html = yield smartFetch(url, getGuardoserieBaseUrl(), {
           headers: {
-            "User-Agent": USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
           }
         });
-        if (!response.ok) return null;
-        return yield response.text();
+        return html;
       });
     }
     function guessUrlFromSlug(baseUrl, title, originalTitle) {
@@ -7838,34 +7960,30 @@ var require_guardoserie = __commonJS({
             const searchStartedAt = Date.now();
             const searchUrl = `${baseUrl}/wp-admin/admin-ajax.php`;
             const body = `s=${encodeURIComponent(query)}&action=searchwp_live_search&swpengine=default&swpquery=${encodeURIComponent(query)}`;
-            const response = yield fetch(searchUrl, {
-              method: "POST",
-              headers: {
-                "User-Agent": USER_AGENT,
-                "X-Requested-With": "XMLHttpRequest",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "Origin": baseUrl,
-                "Referer": `${baseUrl}/`
-              },
-              body
-            });
-            if (response.ok) {
-              const searchHtml = yield response.text();
+            try {
+              const searchHtml = yield smartFetch(searchUrl, baseUrl, {
+                method: "POST",
+                headers: {
+                  "X-Requested-With": "XMLHttpRequest",
+                  "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                  "Origin": baseUrl,
+                  "Referer": `${baseUrl}/`
+                },
+                body
+              });
               const results = extractSearchResultsFromHtml(searchHtml, baseUrl);
               mark("search_ajax_done", { q: query, ms: Date.now() - searchStartedAt, results: results.length });
               if (results.length > 0) return results;
+            } catch (e) {
+              console.error("[Guardoserie] AJAX search error:", e.message);
             }
             const searchPageUrl = `${baseUrl}/?s=${encodeURIComponent(query)}`;
-            const proxiedSearchUrl = getProxiedUrl(searchPageUrl);
-            const pageRes = yield fetch(proxiedSearchUrl, {
+            const pageHtml = yield smartFetch(searchPageUrl, baseUrl, {
               headers: {
-                "User-Agent": USER_AGENT,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
               }
             });
-            if (!pageRes.ok) return [];
-            const pageHtml = yield pageRes.text();
             const fallbackResults = extractSearchResultsFromHtml(pageHtml, baseUrl);
             mark("search_fallback_done", { q: query, ms: Date.now() - searchStartedAt, results: fallbackResults.length });
             return fallbackResults;
@@ -7915,16 +8033,13 @@ var require_guardoserie = __commonJS({
             if (isExactMatch || isPartialMatch) {
               try {
                 const verifyStartedAt = Date.now();
-                const pageRes = yield fetch(result.url, {
+                const pageHtml = yield smartFetch(result.url, getGuardoserieBaseUrl(), {
                   headers: {
-                    "User-Agent": USER_AGENT,
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
                     "Referer": `${getGuardoserieBaseUrl()}/`
                   }
                 });
-                if (!pageRes.ok) continue;
-                const pageHtml = yield pageRes.text();
                 mark("result_verify_done", { url: result.url, ms: Date.now() - verifyStartedAt });
                 let foundYear = null;
                 const pubYearMatch = pageHtml.match(/pubblicazione.*?release-year\/(\d{4})/i);
@@ -7989,15 +8104,13 @@ var require_guardoserie = __commonJS({
           if (type === "tv" || type === "series") {
             season = effectiveSeason;
             episode = effectiveEpisode;
-            const pageRes = yield fetch(targetUrl, {
+            const pageHtml = yield smartFetch(targetUrl, getGuardoserieBaseUrl(), {
               headers: {
-                "User-Agent": USER_AGENT,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Referer": `${getGuardoserieBaseUrl()}/`
               }
             });
-            const pageHtml = yield pageRes.text();
             const resolvedEpisodeUrl = extractEpisodeUrlFromSeriesPage(pageHtml, season, episode);
             mark("series_episode_resolve_done", { ok: Boolean(resolvedEpisodeUrl) });
             if (resolvedEpisodeUrl) {
@@ -8008,15 +8121,13 @@ var require_guardoserie = __commonJS({
             }
           }
           console.log(`[Guardoserie] Found episode/movie URL: ${episodeUrl}`);
-          const finalRes = yield fetch(episodeUrl, {
+          const finalHtml = yield smartFetch(episodeUrl, getGuardoserieBaseUrl(), {
             headers: {
-              "User-Agent": USER_AGENT,
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
               "Referer": `${getGuardoserieBaseUrl()}/`
             }
           });
-          const finalHtml = yield finalRes.text();
           mark("final_page_done");
           let playerLinks = extractPlayerLinksFromHtml(finalHtml);
           mark("player_links_extracted", { links: playerLinks.length });
@@ -8024,15 +8135,13 @@ var require_guardoserie = __commonJS({
             const fallbackEpisodeUrl = extractEpisodeUrlFromSeriesPage(finalHtml, season, episode);
             if (fallbackEpisodeUrl && fallbackEpisodeUrl !== episodeUrl) {
               console.log(`[Guardoserie] Fallback to derived episode URL: ${fallbackEpisodeUrl}`);
-              const retryRes = yield fetch(fallbackEpisodeUrl, {
+              const retryHtml = yield smartFetch(fallbackEpisodeUrl, getGuardoserieBaseUrl(), {
                 headers: {
-                  "User-Agent": USER_AGENT,
                   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                   "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
                   "Referer": `${getGuardoserieBaseUrl()}/`
                 }
               });
-              const retryHtml = yield retryRes.text();
               const fallbackLinks = extractPlayerLinksFromHtml(retryHtml);
               if (fallbackLinks.length > 0) {
                 playerLinks = fallbackLinks;

@@ -7479,6 +7479,130 @@ var require_formatter = __commonJS({
   }
 });
 
+// cf_bypass.js
+var require_cf_bypass = __commonJS({
+  "cf_bypass.js"(exports2, module2) {
+    var puppeteer = require("puppeteer-extra");
+    var StealthPlugin = require("puppeteer-extra-plugin-stealth");
+    var fs = require("fs");
+    puppeteer.use(StealthPlugin());
+    function getClearance(url, headless = false) {
+      return __async(this, null, function* () {
+        const isDocker = process.env.IN_DOCKER === "true";
+        const effectiveHeadless = isDocker ? false : headless;
+        console.log(`[CF] Avvio browser (Docker: ${isDocker}, Headless: ${effectiveHeadless})...`);
+        const launchOptions = {
+          headless: effectiveHeadless,
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu"
+          ]
+        };
+        if (isDocker) {
+          if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+            launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+          } else if (fs.existsSync("/usr/bin/chromium")) {
+            launchOptions.executablePath = "/usr/bin/chromium";
+          } else if (fs.existsSync("/usr/bin/google-chrome")) {
+            launchOptions.executablePath = "/usr/bin/google-chrome";
+          }
+        }
+        const browser = yield puppeteer.launch(launchOptions);
+        const [page] = yield browser.pages();
+        const ua = yield page.evaluate(() => navigator.userAgent);
+        try {
+          yield page.goto(url, { waitUntil: "domcontentloaded" });
+          for (let i = 0; i < 60; i++) {
+            const cookies = yield page.cookies();
+            const cf = cookies.find((c) => c.name === "cf_clearance");
+            if (cf) {
+              const data = {
+                userAgent: ua,
+                cookies: cookies.map((c) => `${c.name}=${c.value}`).join("; "),
+                cf_clearance: cf.value,
+                timestamp: Date.now()
+              };
+              fs.writeFileSync("cf-session.json", JSON.stringify(data, null, 2));
+              yield browser.close();
+              return data;
+            }
+            try {
+              const frames = page.frames();
+              const cfFrame = frames.find((f) => f.url().includes("turnstile"));
+              if (cfFrame) yield cfFrame.click("#challenge-stage").catch(() => {
+              });
+            } catch (e) {
+            }
+            yield new Promise((r) => setTimeout(r, 1e3));
+          }
+          throw new Error("Bypass timeout");
+        } catch (err) {
+          yield browser.close();
+          throw err;
+        }
+      });
+    }
+    module2.exports = { getClearance };
+  }
+});
+
+// src/utils/cf_handler.js
+var require_cf_handler = __commonJS({
+  "src/utils/cf_handler.js"(exports2, module2) {
+    var axios = require("axios");
+    var fs = require("fs");
+    var path = require("path");
+    var { getClearance } = require_cf_bypass();
+    function smartFetch(_0, _1) {
+      return __async(this, arguments, function* (url, domain, options = {}) {
+        const sessionFile = path.join(__dirname, "../../cf-session.json");
+        const loadSession = () => {
+          if (fs.existsSync(sessionFile)) {
+            try {
+              return JSON.parse(fs.readFileSync(sessionFile, "utf8"));
+            } catch (e) {
+              return {};
+            }
+          }
+          return {};
+        };
+        let session = loadSession();
+        const doRequest = (sess) => __async(null, null, function* () {
+          const mergedHeaders = __spreadValues({
+            "User-Agent": sess.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Cookie": sess.cookies || "",
+            "Referer": domain + "/",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+          }, options.headers || {});
+          return axios({
+            url,
+            method: options.method || "GET",
+            data: options.body || null,
+            headers: mergedHeaders,
+            timeout: options.timeout || 2e4
+          });
+        });
+        try {
+          const res = yield doRequest(session);
+          return res.data;
+        } catch (err) {
+          if (err.response && (err.response.status === 403 || err.response.status === 503)) {
+            console.warn(`[CF-HANDLER] Blocco rilevato. Avvio bypass per ${domain}...`);
+            const newSession = yield getClearance(domain, false);
+            console.log(`[CF-HANDLER] Bypass riuscito. Riprovo richiesta...`);
+            const retryRes = yield doRequest(newSession);
+            return retryRes.data;
+          }
+          throw err;
+        }
+      });
+    }
+    module2.exports = { smartFetch };
+  }
+});
+
 // src/guardaserie/index.js
 var require_guardaserie = __commonJS({
   "src/guardaserie/index.js"(exports2, module2) {
@@ -7509,11 +7633,11 @@ var require_guardaserie = __commonJS({
     function getMappingApiUrl() {
       return "https://animemapping.realbestia.com";
     }
-    var USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
     var { extractMixDrop, extractDropLoad, extractSuperVideo, extractUqload, extractUpstream } = require_extractors();
     require_fetch_helper();
     var { checkQualityFromPlaylist } = require_quality_helper();
     var { formatStream } = require_formatter();
+    var { smartFetch } = require_cf_handler();
     var STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || "").trim().toLowerCase() === "1";
     function getQualityFromName(qualityStr) {
       if (!qualityStr) return "Unknown";
@@ -7640,15 +7764,18 @@ var require_guardaserie = __commonJS({
           let matchedTitle = imdbId;
           if (imdbId) {
             const searchUrl = `${getGuardaserieBaseUrl()}/index.php?do=search&subaction=search&story=${imdbId}`;
-            const searchRes = yield fetch(searchUrl, { headers: { "User-Agent": USER_AGENT, "Referer": getGuardaserieBaseUrl() } });
-            if (searchRes.ok) {
-              const searchHtml = yield searchRes.text();
+            const searchHtml = yield smartFetch(searchUrl, getGuardaserieBaseUrl(), {
+              headers: { "Referer": getGuardaserieBaseUrl() }
+            });
+            if (searchHtml) {
               const match = /<div class="mlnh-2">\s*<h2>\s*<a href="([^"]+)" title="([^"]+)">/i.exec(searchHtml);
               if (match && !match[2].toUpperCase().includes("[SUB ITA]")) {
                 showUrl = match[1].startsWith("/") ? `${getGuardaserieBaseUrl()}${match[1]}` : match[1];
                 matchedTitle = match[2] || imdbId;
-                const pageRes = yield fetch(showUrl, { headers: { "User-Agent": USER_AGENT, "Referer": getGuardaserieBaseUrl() } });
-                if (pageRes.ok) showHtml = yield pageRes.text();
+                const pageHtml = yield smartFetch(showUrl, getGuardaserieBaseUrl(), {
+                  headers: { "Referer": getGuardaserieBaseUrl() }
+                });
+                if (pageHtml) showHtml = pageHtml;
               }
             }
             mark("search_by_imdb_done", { ok: Boolean(showUrl) });
