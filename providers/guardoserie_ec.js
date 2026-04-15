@@ -55,52 +55,234 @@ var __async = (__this, __arguments, generator) => {
   });
 };
 
-// src/extractors/common.js
-var require_common = __commonJS({
-  "src/extractors/common.js"(exports2, module2) {
-    var USER_AGENT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
-    function getProxiedUrl(url) {
-      let proxyUrl = null;
-      try {
-        if (typeof global !== "undefined" && global.CF_PROXY_URL) {
-          proxyUrl = global.CF_PROXY_URL;
-        }
-      } catch (e) {
+// src/formatter.js
+var require_formatter = __commonJS({
+  "src/formatter.js"(exports2, module2) {
+    function normalizePlaybackHeaders(headers) {
+      if (!headers || typeof headers !== "object") return headers;
+      const normalized = {};
+      for (const [key, value] of Object.entries(headers)) {
+        if (value == null) continue;
+        const lowerKey = String(key).toLowerCase();
+        if (lowerKey === "user-agent") normalized["User-Agent"] = value;
+        else if (lowerKey === "referer" || lowerKey === "referrer") normalized["Referer"] = value;
+        else if (lowerKey === "origin") normalized["Origin"] = value;
+        else if (lowerKey === "accept") normalized["Accept"] = value;
+        else if (lowerKey === "accept-language") normalized["Accept-Language"] = value;
+        else normalized[key] = value;
       }
-      if (proxyUrl && url) {
-        const separator = proxyUrl.includes("?") ? "&" : "?";
-        return `${proxyUrl}${separator}url=${encodeURIComponent(url)}`;
-      }
-      return url;
+      return normalized;
     }
-    function unPack(p, a, c, k, e, d) {
-      e = function(c2) {
-        return (c2 < a ? "" : e(parseInt(c2 / a))) + ((c2 = c2 % a) > 35 ? String.fromCharCode(c2 + 29) : c2.toString(36));
-      };
-      if (!"".replace(/^/, String)) {
-        while (c--) {
-          d[e(c)] = k[c] || e(c);
-        }
-        k = [function(e2) {
-          return d[e2] || e2;
-        }];
-        e = function() {
-          return "\\w+";
+    function shouldForceNotWebReadyForPlugin(stream, providerName, headers, behaviorHints) {
+      const text = [
+        stream == null ? void 0 : stream.url,
+        stream == null ? void 0 : stream.name,
+        stream == null ? void 0 : stream.title,
+        stream == null ? void 0 : stream.server,
+        providerName
+      ].filter(Boolean).join(" ").toLowerCase();
+      if (text.includes("mixdrop") || text.includes("m1xdrop") || text.includes("mxcontent")) {
+        return true;
+      }
+      if (text.includes("loadm") || text.includes("loadm.cam")) {
+        return true;
+      }
+      return false;
+    }
+    function formatStream(stream, providerName) {
+      let quality = stream.quality || "";
+      if (quality === "2160p") quality = "\u{1F525}4K UHD";
+      else if (quality === "1440p") quality = "\u2728 QHD";
+      else if (quality === "1080p") quality = "\u{1F680} FHD";
+      else if (quality === "720p") quality = "\u{1F4BF} HD";
+      else if (quality === "576p" || quality === "480p" || quality === "360p" || quality === "240p") quality = "\u{1F4A9} Low Quality";
+      else if (!quality || ["auto", "unknown", "unknow"].includes(String(quality).toLowerCase())) quality = "Unknow";
+      let title = `\u{1F4C1} ${stream.title || "Stream"}`;
+      let language = stream.language;
+      if (!language) {
+        if (stream.name && (stream.name.includes("SUB ITA") || stream.name.includes("SUB"))) language = "\u{1F1EF}\u{1F1F5} \u{1F1EE}\u{1F1F9}";
+        else if (stream.title && (stream.title.includes("SUB ITA") || stream.title.includes("SUB"))) language = "\u{1F1EF}\u{1F1F5} \u{1F1EE}\u{1F1F9}";
+        else language = "\u{1F1EE}\u{1F1F9}";
+      }
+      let details = [];
+      if (stream.size) details.push(`\u{1F4E6} ${stream.size}`);
+      const desc = details.join(" | ");
+      let pName = stream.name || stream.server || providerName;
+      if (pName) {
+        pName = pName.replace(/\s*\[?\(?\s*SUB\s*ITA\s*\)?\]?/i, "").replace(/\s*\[?\(?\s*ITA\s*\)?\]?/i, "").replace(/\s*\[?\(?\s*SUB\s*\)?\]?/i, "").replace(/\(\s*\)/g, "").replace(/\[\s*\]/g, "").trim();
+      }
+      if (pName === providerName) {
+        pName = pName.charAt(0).toUpperCase() + pName.slice(1);
+      }
+      if (pName) {
+        pName = `\u{1F4E1} ${pName}`;
+      }
+      const behaviorHints = stream.behaviorHints && typeof stream.behaviorHints === "object" ? __spreadValues({}, stream.behaviorHints) : {};
+      let finalHeaders = stream.headers;
+      if (behaviorHints.proxyHeaders && behaviorHints.proxyHeaders.request) {
+        finalHeaders = behaviorHints.proxyHeaders.request;
+      } else if (behaviorHints.headers) {
+        finalHeaders = behaviorHints.headers;
+      }
+      finalHeaders = normalizePlaybackHeaders(finalHeaders);
+      const isStreamingCommunityProvider = String(providerName || "").toLowerCase() === "streamingcommunity" || String((stream == null ? void 0 : stream.name) || "").toLowerCase().includes("streamingcommunity");
+      if (isStreamingCommunityProvider && !finalHeaders) {
+        delete behaviorHints.proxyHeaders;
+        delete behaviorHints.headers;
+        delete behaviorHints.notWebReady;
+      }
+      if (finalHeaders) {
+        behaviorHints.proxyHeaders = behaviorHints.proxyHeaders || {};
+        behaviorHints.proxyHeaders.request = finalHeaders;
+        behaviorHints.headers = finalHeaders;
+      }
+      const shouldForceNotWebReady = shouldForceNotWebReadyForPlugin(stream, providerName, finalHeaders, behaviorHints);
+      if (!isStreamingCommunityProvider && shouldForceNotWebReady) {
+        behaviorHints.notWebReady = true;
+      } else {
+        delete behaviorHints.notWebReady;
+      }
+      const finalName = pName;
+      let finalTitle = `\u{1F4C1} ${stream.title || "Stream"}`;
+      if (desc) finalTitle += ` | ${desc}`;
+      if (language) finalTitle += ` | ${language}`;
+      return __spreadProps(__spreadValues({}, stream), {
+        // Keep original properties
+        name: finalName,
+        title: finalTitle,
+        // Metadata for Stremio UI reconstruction (safer names for RN)
+        providerName: pName,
+        qualityTag: quality,
+        description: desc,
+        originalTitle: stream.title || "Stream",
+        // Ensure language is set for Stremio/Nuvio sorting
+        language,
+        // Mark as formatted
+        _nuvio_formatted: true,
+        behaviorHints,
+        // Explicitly ensure root headers are preserved for Nuvio
+        headers: finalHeaders
+      });
+    }
+    module2.exports = { formatStream };
+  }
+});
+
+// src/fetch_helper.js
+var require_fetch_helper = __commonJS({
+  "src/fetch_helper.js"(exports2, module2) {
+    var FETCH_TIMEOUT = 3e4;
+    function createTimeoutSignal(timeoutMs) {
+      const parsed = Number.parseInt(String(timeoutMs), 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return { signal: void 0, cleanup: null, timed: false };
+      }
+      if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+        return { signal: AbortSignal.timeout(parsed), cleanup: null, timed: true };
+      }
+      if (typeof AbortController !== "undefined" && typeof setTimeout === "function") {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, parsed);
+        return {
+          signal: controller.signal,
+          cleanup: () => clearTimeout(timeoutId),
+          timed: true
         };
-        c = 1;
       }
-      while (c--) {
-        if (k[c]) {
-          p = p.replace(new RegExp("\\b" + e(c) + "\\b", "g"), k[c]);
-        }
-      }
-      return p;
+      return { signal: void 0, cleanup: null, timed: false };
     }
-    module2.exports = {
-      USER_AGENT,
-      unPack,
-      getProxiedUrl
-    };
+    function fetchWithTimeout(_0) {
+      return __async(this, arguments, function* (url, options = {}) {
+        if (typeof fetch === "undefined") {
+          throw new Error("No fetch implementation found!");
+        }
+        const _a = options, { timeout } = _a, fetchOptions = __objRest(_a, ["timeout"]);
+        const requestTimeout = timeout || FETCH_TIMEOUT;
+        const timeoutConfig = createTimeoutSignal(requestTimeout);
+        const requestOptions = __spreadValues({}, fetchOptions);
+        if (timeoutConfig.signal) {
+          if (requestOptions.signal && typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
+            requestOptions.signal = AbortSignal.any([requestOptions.signal, timeoutConfig.signal]);
+          } else if (!requestOptions.signal) {
+            requestOptions.signal = timeoutConfig.signal;
+          }
+        }
+        try {
+          const response = yield fetch(url, requestOptions);
+          return response;
+        } catch (error) {
+          if (error && error.name === "AbortError" && timeoutConfig.timed) {
+            throw new Error(`Request to ${url} timed out after ${requestTimeout}ms`);
+          }
+          throw error;
+        } finally {
+          if (typeof timeoutConfig.cleanup === "function") {
+            timeoutConfig.cleanup();
+          }
+        }
+      });
+    }
+    module2.exports = { fetchWithTimeout, createTimeoutSignal };
+  }
+});
+
+// src/quality_helper.js
+var require_quality_helper = __commonJS({
+  "src/quality_helper.js"(exports2, module2) {
+    var { createTimeoutSignal } = require_fetch_helper();
+    var USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
+    function checkQualityFromPlaylist(_0) {
+      return __async(this, arguments, function* (url, headers = {}) {
+        try {
+          if (!url.includes(".m3u8")) return null;
+          const finalHeaders = __spreadValues({}, headers);
+          if (!finalHeaders["User-Agent"]) {
+            finalHeaders["User-Agent"] = USER_AGENT;
+          }
+          const timeoutConfig = createTimeoutSignal(3e3);
+          try {
+            const response = yield fetch(url, {
+              headers: finalHeaders,
+              signal: timeoutConfig.signal
+            });
+            if (!response.ok) return null;
+            const text = yield response.text();
+            const quality = checkQualityFromText(text);
+            if (quality) console.log(`[QualityHelper] Detected ${quality} from playlist: ${url}`);
+            return quality;
+          } finally {
+            if (typeof timeoutConfig.cleanup === "function") {
+              timeoutConfig.cleanup();
+            }
+          }
+        } catch (e) {
+          return null;
+        }
+      });
+    }
+    function checkQualityFromText(text) {
+      if (!text) return null;
+      if (/RESOLUTION=\d+x2160/i.test(text) || /RESOLUTION=2160/i.test(text)) return "4K";
+      if (/RESOLUTION=\d+x1440/i.test(text) || /RESOLUTION=1440/i.test(text)) return "1440p";
+      if (/RESOLUTION=\d+x1080/i.test(text) || /RESOLUTION=1080/i.test(text)) return "1080p";
+      if (/RESOLUTION=\d+x720/i.test(text) || /RESOLUTION=720/i.test(text)) return "720p";
+      if (/RESOLUTION=\d+x480/i.test(text) || /RESOLUTION=480/i.test(text)) return "480p";
+      return null;
+    }
+    function getQualityFromUrl(url) {
+      if (!url) return null;
+      const urlPath = url.split("?")[0].toLowerCase();
+      if (urlPath.includes("4k") || urlPath.includes("2160")) return "4K";
+      if (urlPath.includes("1440") || urlPath.includes("2k")) return "1440p";
+      if (urlPath.includes("1080") || urlPath.includes("fhd")) return "1080p";
+      if (urlPath.includes("720") || urlPath.includes("hd")) return "720p";
+      if (urlPath.includes("480") || urlPath.includes("sd")) return "480p";
+      if (urlPath.includes("360")) return "360p";
+      return null;
+    }
+    module2.exports = { checkQualityFromPlaylist, getQualityFromUrl, checkQualityFromText };
   }
 });
 
@@ -225,6 +407,55 @@ var require_cf_handler = __commonJS({
       });
     }
     module2.exports = { smartFetch };
+  }
+});
+
+// src/extractors/common.js
+var require_common = __commonJS({
+  "src/extractors/common.js"(exports2, module2) {
+    var USER_AGENT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+    function getProxiedUrl(url) {
+      let proxyUrl = null;
+      try {
+        if (typeof global !== "undefined" && global.CF_PROXY_URL) {
+          proxyUrl = global.CF_PROXY_URL;
+        }
+      } catch (e) {
+      }
+      if (proxyUrl && url) {
+        const separator = proxyUrl.includes("?") ? "&" : "?";
+        return `${proxyUrl}${separator}url=${encodeURIComponent(url)}`;
+      }
+      return url;
+    }
+    function unPack(p, a, c, k, e, d) {
+      e = function(c2) {
+        return (c2 < a ? "" : e(parseInt(c2 / a))) + ((c2 = c2 % a) > 35 ? String.fromCharCode(c2 + 29) : c2.toString(36));
+      };
+      if (!"".replace(/^/, String)) {
+        while (c--) {
+          d[e(c)] = k[c] || e(c);
+        }
+        k = [function(e2) {
+          return d[e2] || e2;
+        }];
+        e = function() {
+          return "\\w+";
+        };
+        c = 1;
+      }
+      while (c--) {
+        if (k[c]) {
+          p = p.replace(new RegExp("\\b" + e(c) + "\\b", "g"), k[c]);
+        }
+      }
+      return p;
+    }
+    module2.exports = {
+      USER_AGENT,
+      unPack,
+      getProxiedUrl
+    };
   }
 });
 
@@ -559,124 +790,6 @@ var require_vidoza = __commonJS({
       });
     }
     module2.exports = { extractVidoza };
-  }
-});
-
-// src/fetch_helper.js
-var require_fetch_helper = __commonJS({
-  "src/fetch_helper.js"(exports2, module2) {
-    var FETCH_TIMEOUT = 3e4;
-    function createTimeoutSignal(timeoutMs) {
-      const parsed = Number.parseInt(String(timeoutMs), 10);
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        return { signal: void 0, cleanup: null, timed: false };
-      }
-      if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
-        return { signal: AbortSignal.timeout(parsed), cleanup: null, timed: true };
-      }
-      if (typeof AbortController !== "undefined" && typeof setTimeout === "function") {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-        }, parsed);
-        return {
-          signal: controller.signal,
-          cleanup: () => clearTimeout(timeoutId),
-          timed: true
-        };
-      }
-      return { signal: void 0, cleanup: null, timed: false };
-    }
-    function fetchWithTimeout(_0) {
-      return __async(this, arguments, function* (url, options = {}) {
-        if (typeof fetch === "undefined") {
-          throw new Error("No fetch implementation found!");
-        }
-        const _a = options, { timeout } = _a, fetchOptions = __objRest(_a, ["timeout"]);
-        const requestTimeout = timeout || FETCH_TIMEOUT;
-        const timeoutConfig = createTimeoutSignal(requestTimeout);
-        const requestOptions = __spreadValues({}, fetchOptions);
-        if (timeoutConfig.signal) {
-          if (requestOptions.signal && typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
-            requestOptions.signal = AbortSignal.any([requestOptions.signal, timeoutConfig.signal]);
-          } else if (!requestOptions.signal) {
-            requestOptions.signal = timeoutConfig.signal;
-          }
-        }
-        try {
-          const response = yield fetch(url, requestOptions);
-          return response;
-        } catch (error) {
-          if (error && error.name === "AbortError" && timeoutConfig.timed) {
-            throw new Error(`Request to ${url} timed out after ${requestTimeout}ms`);
-          }
-          throw error;
-        } finally {
-          if (typeof timeoutConfig.cleanup === "function") {
-            timeoutConfig.cleanup();
-          }
-        }
-      });
-    }
-    module2.exports = { fetchWithTimeout, createTimeoutSignal };
-  }
-});
-
-// src/quality_helper.js
-var require_quality_helper = __commonJS({
-  "src/quality_helper.js"(exports2, module2) {
-    var { createTimeoutSignal } = require_fetch_helper();
-    var USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
-    function checkQualityFromPlaylist(_0) {
-      return __async(this, arguments, function* (url, headers = {}) {
-        try {
-          if (!url.includes(".m3u8")) return null;
-          const finalHeaders = __spreadValues({}, headers);
-          if (!finalHeaders["User-Agent"]) {
-            finalHeaders["User-Agent"] = USER_AGENT;
-          }
-          const timeoutConfig = createTimeoutSignal(3e3);
-          try {
-            const response = yield fetch(url, {
-              headers: finalHeaders,
-              signal: timeoutConfig.signal
-            });
-            if (!response.ok) return null;
-            const text = yield response.text();
-            const quality = checkQualityFromText(text);
-            if (quality) console.log(`[QualityHelper] Detected ${quality} from playlist: ${url}`);
-            return quality;
-          } finally {
-            if (typeof timeoutConfig.cleanup === "function") {
-              timeoutConfig.cleanup();
-            }
-          }
-        } catch (e) {
-          return null;
-        }
-      });
-    }
-    function checkQualityFromText(text) {
-      if (!text) return null;
-      if (/RESOLUTION=\d+x2160/i.test(text) || /RESOLUTION=2160/i.test(text)) return "4K";
-      if (/RESOLUTION=\d+x1440/i.test(text) || /RESOLUTION=1440/i.test(text)) return "1440p";
-      if (/RESOLUTION=\d+x1080/i.test(text) || /RESOLUTION=1080/i.test(text)) return "1080p";
-      if (/RESOLUTION=\d+x720/i.test(text) || /RESOLUTION=720/i.test(text)) return "720p";
-      if (/RESOLUTION=\d+x480/i.test(text) || /RESOLUTION=480/i.test(text)) return "480p";
-      return null;
-    }
-    function getQualityFromUrl(url) {
-      if (!url) return null;
-      const urlPath = url.split("?")[0].toLowerCase();
-      if (urlPath.includes("4k") || urlPath.includes("2160")) return "4K";
-      if (urlPath.includes("1440") || urlPath.includes("2k")) return "1440p";
-      if (urlPath.includes("1080") || urlPath.includes("fhd")) return "1080p";
-      if (urlPath.includes("720") || urlPath.includes("hd")) return "720p";
-      if (urlPath.includes("480") || urlPath.includes("sd")) return "480p";
-      if (urlPath.includes("360")) return "360p";
-      return null;
-    }
-    module2.exports = { checkQualityFromPlaylist, getQualityFromUrl, checkQualityFromText };
   }
 });
 
@@ -7490,127 +7603,31 @@ var require_extractors = __commonJS({
   }
 });
 
-// src/formatter.js
-var require_formatter = __commonJS({
-  "src/formatter.js"(exports2, module2) {
-    function normalizePlaybackHeaders(headers) {
-      if (!headers || typeof headers !== "object") return headers;
-      const normalized = {};
-      for (const [key, value] of Object.entries(headers)) {
-        if (value == null) continue;
-        const lowerKey = String(key).toLowerCase();
-        if (lowerKey === "user-agent") normalized["User-Agent"] = value;
-        else if (lowerKey === "referer" || lowerKey === "referrer") normalized["Referer"] = value;
-        else if (lowerKey === "origin") normalized["Origin"] = value;
-        else if (lowerKey === "accept") normalized["Accept"] = value;
-        else if (lowerKey === "accept-language") normalized["Accept-Language"] = value;
-        else normalized[key] = value;
-      }
-      return normalized;
-    }
-    function shouldForceNotWebReadyForPlugin(stream, providerName, headers, behaviorHints) {
-      const text = [
-        stream == null ? void 0 : stream.url,
-        stream == null ? void 0 : stream.name,
-        stream == null ? void 0 : stream.title,
-        stream == null ? void 0 : stream.server,
-        providerName
-      ].filter(Boolean).join(" ").toLowerCase();
-      if (text.includes("mixdrop") || text.includes("m1xdrop") || text.includes("mxcontent")) {
-        return true;
-      }
-      if (text.includes("loadm") || text.includes("loadm.cam")) {
-        return true;
-      }
-      return false;
-    }
-    function formatStream(stream, providerName) {
-      let quality = stream.quality || "";
-      if (quality === "2160p") quality = "\u{1F525}4K UHD";
-      else if (quality === "1440p") quality = "\u2728 QHD";
-      else if (quality === "1080p") quality = "\u{1F680} FHD";
-      else if (quality === "720p") quality = "\u{1F4BF} HD";
-      else if (quality === "576p" || quality === "480p" || quality === "360p" || quality === "240p") quality = "\u{1F4A9} Low Quality";
-      else if (!quality || ["auto", "unknown", "unknow"].includes(String(quality).toLowerCase())) quality = "Unknow";
-      let title = `\u{1F4C1} ${stream.title || "Stream"}`;
-      let language = stream.language;
-      if (!language) {
-        if (stream.name && (stream.name.includes("SUB ITA") || stream.name.includes("SUB"))) language = "\u{1F1EF}\u{1F1F5} \u{1F1EE}\u{1F1F9}";
-        else if (stream.title && (stream.title.includes("SUB ITA") || stream.title.includes("SUB"))) language = "\u{1F1EF}\u{1F1F5} \u{1F1EE}\u{1F1F9}";
-        else language = "\u{1F1EE}\u{1F1F9}";
-      }
-      let details = [];
-      if (stream.size) details.push(`\u{1F4E6} ${stream.size}`);
-      const desc = details.join(" | ");
-      let pName = stream.name || stream.server || providerName;
-      if (pName) {
-        pName = pName.replace(/\s*\[?\(?\s*SUB\s*ITA\s*\)?\]?/i, "").replace(/\s*\[?\(?\s*ITA\s*\)?\]?/i, "").replace(/\s*\[?\(?\s*SUB\s*\)?\]?/i, "").replace(/\(\s*\)/g, "").replace(/\[\s*\]/g, "").trim();
-      }
-      if (pName === providerName) {
-        pName = pName.charAt(0).toUpperCase() + pName.slice(1);
-      }
-      if (pName) {
-        pName = `\u{1F4E1} ${pName}`;
-      }
-      const behaviorHints = stream.behaviorHints && typeof stream.behaviorHints === "object" ? __spreadValues({}, stream.behaviorHints) : {};
-      let finalHeaders = stream.headers;
-      if (behaviorHints.proxyHeaders && behaviorHints.proxyHeaders.request) {
-        finalHeaders = behaviorHints.proxyHeaders.request;
-      } else if (behaviorHints.headers) {
-        finalHeaders = behaviorHints.headers;
-      }
-      finalHeaders = normalizePlaybackHeaders(finalHeaders);
-      const isStreamingCommunityProvider = String(providerName || "").toLowerCase() === "streamingcommunity" || String((stream == null ? void 0 : stream.name) || "").toLowerCase().includes("streamingcommunity");
-      if (isStreamingCommunityProvider && !finalHeaders) {
-        delete behaviorHints.proxyHeaders;
-        delete behaviorHints.headers;
-        delete behaviorHints.notWebReady;
-      }
-      if (finalHeaders) {
-        behaviorHints.proxyHeaders = behaviorHints.proxyHeaders || {};
-        behaviorHints.proxyHeaders.request = finalHeaders;
-        behaviorHints.headers = finalHeaders;
-      }
-      const shouldForceNotWebReady = shouldForceNotWebReadyForPlugin(stream, providerName, finalHeaders, behaviorHints);
-      if (!isStreamingCommunityProvider && shouldForceNotWebReady) {
-        behaviorHints.notWebReady = true;
-      } else {
-        delete behaviorHints.notWebReady;
-      }
-      const finalName = pName;
-      let finalTitle = `\u{1F4C1} ${stream.title || "Stream"}`;
-      if (desc) finalTitle += ` | ${desc}`;
-      if (language) finalTitle += ` | ${language}`;
-      return __spreadProps(__spreadValues({}, stream), {
-        // Keep original properties
-        name: finalName,
-        title: finalTitle,
-        // Metadata for Stremio UI reconstruction (safer names for RN)
-        providerName: pName,
-        qualityTag: quality,
-        description: desc,
-        originalTitle: stream.title || "Stream",
-        // Ensure language is set for Stremio/Nuvio sorting
-        language,
-        // Mark as formatted
-        _nuvio_formatted: true,
-        behaviorHints,
-        // Explicitly ensure root headers are preserved for Nuvio
-        headers: finalHeaders
-      });
-    }
-    module2.exports = { formatStream };
-  }
-});
-
 // src/guardoserie/index.js
 var require_guardoserie = __commonJS({
   "src/guardoserie/index.js"(exports2, module2) {
-    var { USER_AGENT, getProxiedUrl } = require_common();
-    var { smartFetch } = require_cf_handler();
-    var { extractLoadm, extractUqload, extractDropLoad, extractMixDrop, extractSuperVideo } = require_extractors();
     var { formatStream } = require_formatter();
     var { checkQualityFromPlaylist } = require_quality_helper();
+    var IS_SERVER = typeof process !== "undefined" && process.versions && process.versions.node;
+    if (!IS_SERVER) {
+      module2.exports = {
+        getStreams: (id, type, season, episode) => __async(null, null, function* () {
+          try {
+            const url = `https://easystreams.realbestia.com/resolve/guardoserie?id=${id}&type=${type}&s=${season || 1}&ep=${episode || 1}`;
+            const response = yield fetch(url);
+            const data = yield response.json();
+            return data.streams || [];
+          } catch (e) {
+            console.error("[Guardoserie-Client] API Error:", e.message);
+            return [];
+          }
+        })
+      };
+      return;
+    }
+    var { smartFetch } = require_cf_handler();
+    var { USER_AGENT, getProxiedUrl } = require_common();
+    var { extractLoadm, extractUqload, extractDropLoad, extractMixDrop, extractSuperVideo } = require_extractors();
     var STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || "").trim().toLowerCase() === "1";
     function getGuardoserieBaseUrl() {
       return "https://guardoserie.team";

@@ -8078,11 +8078,28 @@ var require_guardaserie = __commonJS({
 // src/guardoserie/index.js
 var require_guardoserie = __commonJS({
   "src/guardoserie/index.js"(exports2, module2) {
-    var { USER_AGENT, getProxiedUrl } = require_common();
-    var { smartFetch } = require_cf_handler();
-    var { extractLoadm, extractUqload, extractDropLoad, extractMixDrop, extractSuperVideo } = require_extractors();
     var { formatStream } = require_formatter();
     var { checkQualityFromPlaylist } = require_quality_helper();
+    var IS_SERVER = typeof process !== "undefined" && process.versions && process.versions.node;
+    if (!IS_SERVER) {
+      module2.exports = {
+        getStreams: (id, type, season, episode) => __async(null, null, function* () {
+          try {
+            const url = `https://easystreams.realbestia.com/resolve/guardoserie?id=${id}&type=${type}&s=${season || 1}&ep=${episode || 1}`;
+            const response = yield fetch(url);
+            const data = yield response.json();
+            return data.streams || [];
+          } catch (e) {
+            console.error("[Guardoserie-Client] API Error:", e.message);
+            return [];
+          }
+        })
+      };
+      return;
+    }
+    var { smartFetch } = require_cf_handler();
+    var { USER_AGENT, getProxiedUrl } = require_common();
+    var { extractLoadm, extractUqload, extractDropLoad, extractMixDrop, extractSuperVideo } = require_extractors();
     var STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || "").trim().toLowerCase() === "1";
     function getGuardoserieBaseUrl() {
       return "https://guardoserie.team";

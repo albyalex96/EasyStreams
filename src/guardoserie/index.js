@@ -1,8 +1,32 @@
-const { USER_AGENT, getProxiedUrl } = require('../extractors/common');
-const { smartFetch } = require('../utils/cf_handler');
-const { extractLoadm, extractUqload, extractDropLoad, extractMixDrop, extractSuperVideo } = require('../extractors');
 const { formatStream } = require('../formatter');
 const { checkQualityFromPlaylist } = require('../quality_helper');
+
+// Rilevamento ambiente: Server (Node) o Client (Nuvio/React Native)
+const IS_SERVER = typeof process !== 'undefined' && process.versions && process.versions.node;
+
+if (!IS_SERVER) {
+    // SIAMO SU NUVIO: usiamo l'API remota del server per evitare crash e blocchi CF
+    module.exports = {
+        getStreams: async (id, type, season, episode) => {
+            try {
+                const url = `https://easystreams.realbestia.com/resolve/guardoserie?id=${id}&type=${type}&s=${season || 1}&ep=${episode || 1}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.streams || [];
+            } catch (e) {
+                console.error('[Guardoserie-Client] API Error:', e.message);
+                return [];
+            }
+        }
+    };
+    // Interrompiamo l'esecuzione qui per il client, il resto è logica server-only
+    return;
+}
+
+// SIAMO SU SERVER: carichiamo le librerie pesanti
+const { smartFetch } = require('../utils/cf_handler');
+const { USER_AGENT, getProxiedUrl } = require('../extractors/common');
+const { extractLoadm, extractUqload, extractDropLoad, extractMixDrop, extractSuperVideo } = require('../extractors');
 const STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || '').trim().toLowerCase() === '1';
 function getGuardoserieBaseUrl() {
     return 'https://guardoserie.team';
