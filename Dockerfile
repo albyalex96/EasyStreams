@@ -52,8 +52,8 @@ WORKDIR /app
 
 # Env flag for the code
 ENV IN_DOCKER=true
-# Puppeteer needs to know where chromium is
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV DISPLAY=:99
 
 COPY package.json package-lock.json* ./
 RUN npm install
@@ -63,7 +63,10 @@ COPY . .
 # Build providers
 RUN node build.js || echo "Build failed, continuing anyway..."
 
+# Ensure start script is executable
+RUN chmod +x start.sh
+
 EXPOSE 7000
 
-# Start with virtual display and specific screen settings
-CMD ["xvfb-run", "--server-args=-screen 0 1280x1024x24", "node", "stremio_addon.js"]
+# Use the startup script
+CMD ["./start.sh"]
