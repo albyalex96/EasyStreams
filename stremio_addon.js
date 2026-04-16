@@ -1,4 +1,3 @@
-
 // Polyfill fetch and related Web APIs for Node.js environments (Must be at the top)
 if (typeof global.Blob === 'undefined') {
     global.Blob = require('node:buffer').Blob;
@@ -34,6 +33,7 @@ const QUIET_PROVIDER_LOGS = true;
 
 const PROVIDER_LOG_PREFIXES = [
     '[GuardaHD]',
+    '[Guardoserie]',
     '[Guardaserie]',
     '[AnimeUnity]',
     '[AnimeWorld]',
@@ -253,7 +253,6 @@ global.fetch = async function (url, options = {}) {
         return response;
     } catch (error) {
         if (error.name === 'AbortError') {
-            // Re-throw as a timeout error for clarity if aborted by our timeout
             throw new Error(`Request to ${url} timed out after ${options.timeout || FETCH_TIMEOUT}ms`);
         }
         throw error;
@@ -601,7 +600,6 @@ function toAbsoluteEpisodeFromSeasonCounts(seasonCounts, season, episode) {
 
     const parsedSeason = Number.parseInt(season, 10);
     if (!Number.isInteger(parsedSeason) || parsedSeason < 1) {
-        // No season in request: already absolute-style input.
         return parsedEpisode;
     }
     if (parsedSeason === 1) return parsedEpisode;
@@ -609,7 +607,6 @@ function toAbsoluteEpisodeFromSeasonCounts(seasonCounts, season, episode) {
     const seasons = Array.isArray(seasonCounts) ? seasonCounts : [];
     const current = seasons.find((s) => s.season_number === parsedSeason);
     if (current && parsedEpisode > current.episode_count) {
-        // Likely already absolute.
         return parsedEpisode;
     }
 
@@ -632,8 +629,6 @@ async function detectAnimeByTmdb(type, requestContext = null) {
     if (!tmdbId) return false;
 
     const normalizedType = String(type || '').toLowerCase();
-    // Keep media type strict to avoid false positives on shared numeric IDs
-    // (e.g. series TV id can exist as a different movie id).
     const endpoints = normalizedType === 'movie'
         ? ['movie']
         : normalizedType === 'series'
@@ -695,7 +690,6 @@ function parseStremioRequestId(type, id) {
                 episode = Number.parseInt(parts[3], 10);
                 seasonProvided = true;
             } else if (parts.length === 3) {
-                // Absolute numbering fallback, e.g. tmdb:12:247.
                 providerId = `${parts[0]}:${parts[1]}`;
                 season = null;
                 episode = Number.parseInt(parts[2], 10);
@@ -867,7 +861,6 @@ function applyMappingHintsToContext(context, payload) {
     } else if (/^\d+$/.test(tmdbCandidate)) {
         context.tmdbId = tmdbCandidate;
     } else if (/^tt\d+$/i.test(tmdbCandidate) && !context.imdbId) {
-        // Some fallbacks return IMDb where TMDB is expected.
         context.imdbId = tmdbCandidate;
     }
 
@@ -1198,8 +1191,6 @@ function isLikelyAnimeRequest(type, providerId, requestContext) {
 
 async function resolveAnimeRoutingFlag(type, providerId, requestContext) {
     const normalizedType = String(type || '').toLowerCase();
-    // For IMDb IDs with no usable mapping signals, avoid anime auto-routing.
-    // This prevents false-positive anime matches from TMDB/find fallbacks.
     if (
         String(requestContext?.idType || '').toLowerCase() === 'imdb' &&
         requestContext?.mappingLookupMiss === true &&
@@ -1239,7 +1230,6 @@ function getProviderExecutionOrder(type, providerId, requestContext, animeRoutin
 
     if (normalizedType === 'movie') {
         if (isKitsuRequest) {
-            // For Kitsu movies, use anime providers first and keep non-anime fallbacks.
             plan = ['animeunity', 'animeworld', 'animesaturn', 'streamingcommunity', 'guardahd', 'cinemacity'];
         } else if (isImdbRequest) {
             plan = likelyAnime
@@ -1385,9 +1375,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
         if (requestContext?.tmdbId) {
             logVerbose(`[Stremio] Context: TMDB=${requestContext.tmdbId}, MappedSeason=${requestContext.mappedSeason ?? 'n/a'}, CanonicalSeason=${requestContext.canonicalSeason}`);
         }
-        // Map Stremio type to provider type
-        // Stremio: movie, series, anime
-        // Providers: movie, tv
+
         const providerType = (type === 'movie') ? 'movie' : 'tv';
 
         const collectedStreams = [];
@@ -1431,7 +1419,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                     timeoutId = setTimeout(() => {
                         didTimeout = true;
                         console.warn(`[${name}] Timed out after ${providerTimeoutMs}ms`);
-                        resolve([]); // Resolve with empty array on timeout
+                        resolve([]);
                     }, providerTimeoutMs);
                 });
 
@@ -1452,11 +1440,9 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                     }
                 })();
 
-                // Race between provider execution and timeout
                 let streams = await Promise.race([providerPromise, timeoutPromise]);
                 rawStreamsCount = Array.isArray(streams) ? streams.length : 0;
 
-                // Fase 2.3: Stream Processing
                 const processedStreams = streams
                     .filter((s) => {
                         if (!s || !s.url) return false;
@@ -1471,7 +1457,6 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                         if (isAnimeUnityProvider && !hasEasyProxy) return false;
                         if (isStreamHgProviderStream && !hasEasyProxy) return false;
                         const canProxyMixdrop = Boolean(easyProxyUrl) && isMixdropStreamUrl(s.url);
-                        // Global filter for specific unwanted servers
                         return (
                             (canProxyMixdrop || (
                                 !server.includes('mixdrop') &&
@@ -1517,7 +1502,6 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                             proxiedByEasyProxy = finalStreamUrl !== s.url;
                         }
 
-                        // For Stremio, we reconstruct the legacy multiline format using metadata
                         const nameUI = (s.qualityTag && s.qualityTag !== 'Unknown') ? s.qualityTag : s.providerName;
 
                         let titleUI = `📁 ${s.originalTitle}\n${s.providerName}`;
@@ -1531,7 +1515,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                         const finalBehaviorHints = {
                             ...(s.behaviorHints || {}),
                             notWebReady: proxiedByEasyProxy ? false : s?.behaviorHints?.notWebReady === true,
-                            bingeGroup: name // Consistent grouping by provider name
+                            bingeGroup: name
                         };
 
                         if (proxiedByEasyProxy) {
@@ -1591,11 +1575,6 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
         }
 
         const streams = collectedStreams.slice();
-
-        // Sort streams? Maybe by quality or provider preference?
-        // For now, just return them all.
-
-        // Filter out streams without URL
         const validStreams = streams.filter(s => s.url);
 
         if (PROVIDER_BENCHMARK_LOGS && providerBenchmarkResults.length > 0) {
@@ -1626,9 +1605,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             }
         }
 
-        // Sort: StreamingCommunity first, then Language (ITA > SUB ITA), then Quality Descending
         validStreams.sort((a, b) => {
-            // 1. StreamingCommunity Priority
             const providerA = a.behaviorHints?.bingeGroup || '';
             const providerB = b.behaviorHints?.bingeGroup || '';
 
@@ -1638,7 +1615,6 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             if (isA_SC && !isB_SC) return -1;
             if (!isA_SC && isB_SC) return 1;
 
-            // 2. Language Priority (ITA > SUB ITA > Others)
             const getLangScore = (stream) => {
                 const lang = stream.language || '';
                 if (lang === '🇮🇹') return 2;
@@ -1650,10 +1626,9 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             const langScoreB = getLangScore(b);
 
             if (langScoreA !== langScoreB) {
-                return langScoreB - langScoreA; // Descending (2 > 1 > 0)
+                return langScoreB - langScoreA;
             }
 
-            // 3. Quality Priority
             const qualityOrder = {
                 '🔥4K UHD': 10,
                 '✨ QHD': 9,
@@ -1672,7 +1647,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             const scoreA = getScore(a.name);
             const scoreB = getScore(b.name);
 
-            return scoreB - scoreA; // Descending
+            return scoreB - scoreA;
         });
 
         logVerbose(`[Stremio] Returning ${validStreams.length} streams total.`);
@@ -1710,7 +1685,6 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
     }
 });
 
-
 const addonInterface = builder.getInterface();
 const addonRouter = getRouter(addonInterface);
 
@@ -1720,7 +1694,6 @@ app.get('/', (req, res) => {
     const providerNames = Object.keys(providers);
     const providersHtml = providerNames.map(p => `<div class="provider-tag">${p}</div>`).join('');
 
-    // Standard Stremio Landing Page Style
     const landingHtml = `
     <!DOCTYPE html>
     <html lang="en">
@@ -1957,8 +1930,6 @@ app.get('/', (req, res) => {
             .footer a:hover {
                 color: var(--purple);
             }
-            
-            /* Background Pattern */
             .bg-pattern {
                 position: absolute;
                 top: 0;
@@ -2025,7 +1996,6 @@ app.get('/', (req, res) => {
         </div>
 
         <script>
-            // Dynamic Install Link
             const currentHost = window.location.host;
             const protocol = window.location.protocol;
             const installBtn = document.getElementById('installLink');
@@ -2077,12 +2047,12 @@ app.get('/', (req, res) => {
                 easyProxyPasswordInput.addEventListener('input', updateInstallLinks);
             }
             updateInstallLinks();
-            // Copy Link Logic
+
             copyBtn.addEventListener('click', async () => {
                 try {
                     const showCopySuccess = () => {
                         const originalText = copyBtn.innerText;
-                        copyBtn.innerText = '? Copied!';
+                        copyBtn.innerText = '✅ Copied!';
                         copyBtn.style.borderColor = '#4CAF50';
                         copyBtn.style.color = '#4CAF50';
                         
@@ -2126,51 +2096,10 @@ app.get('/', (req, res) => {
 
 app.use('/', addonRouter);
 
-// API per Nuvio / Client-side
-app.get('/resolve/guardoserie', async (req, res) => {
-    const { id, type, s, ep } = req.query;
-    if (!id || !type) {
-        return res.status(400).json({ error: 'Missing parameters (id, type)' });
-    }
-
-    console.log(`[API] Richiesta remota Guardoserie: ${type} ${id} ${s}x${ep}`);
-    
-    try {
-        const provider = providers.guardoserie;
-        const season = parseInt(s) || 1;
-        const episode = parseInt(ep) || 1;
-        
-        // Risolviamo il contesto (necessario per TMDB/Kitsu mapping)
-        const requestContext = await resolveProviderRequestContext(type, id, season, episode, 'it');
-        const providerContext = buildProviderRequestContext(requestContext);
-        
-        const streams = await provider.getStreams(id, type, season, episode, providerContext);
-        res.json({ streams });
-    } catch (e) {
-        console.error('[API] Errore risoluzione remota:', e.message);
-        res.status(500).json({ error: e.message });
-    }
-});
-
 const PORT = process.env.PORT || 7000;
-
-// Add warmup logic for providers that need Cloudflare bypass
-async function warmup() {
-    console.log('[Warmup] Avvio riscaldamento provider...');
-    try {
-        const { getClearance } = require('./cf_bypass');
-        // Riscaldiamo Guardoserie
-        await getClearance('https://guardoserie.team', process.env.IN_DOCKER === 'true');
-        console.log('[Warmup] Guardoserie pronto!');
-    } catch (e) {
-        console.error('[Warmup] Errore riscaldamento:', e.message);
-    }
-}
 
 const server = app.listen(PORT, () => {
     logInfo(`Stremio Addon running at http://localhost:${PORT}`);
-    // Avvia warmup in background
-    warmup();
 });
 
 // Graceful Shutdown
