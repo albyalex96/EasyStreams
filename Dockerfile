@@ -1,6 +1,6 @@
 FROM node:18-slim
 
-# Install system dependencies: git, python, uv and browser libs
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     git \
@@ -40,11 +40,10 @@ RUN apt-get update && apt-get install -y \
     libx11-6 \
     libxcb1 \
     libxrandr2 \
-    && curl -LsSf https://astral.sh/uv/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 
-# Add uv to PATH
-ENV PATH="/root/.cargo/bin:${PATH}"
+# Install uv from official image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
