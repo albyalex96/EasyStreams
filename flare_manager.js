@@ -30,7 +30,7 @@ class FlareSolverrManager {
         const isWin = process.platform === 'win32';
 
         try {
-            if (!fs.existsSync(this.fsDir)) {
+            if (!fs.existsSync(this.fsDir) && process.env.IN_DOCKER !== 'true') {
                 console.log('[FlareSolverr] Installazione automatica in corso...');
                 let downloadUrl;
                 if (isWin) {
