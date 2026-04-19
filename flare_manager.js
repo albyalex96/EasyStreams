@@ -142,12 +142,18 @@ class FlareSolverrManager {
         });
 
         this.process.on('close', (code) => {
+            console.log(`[FlareSolverr] Processo chiuso con codice ${code}.`);
             if (this.isStarting) {
-                console.log(`[FlareSolverr] Processo chiuso con codice ${code}`);
                 this.isStarting = false;
                 resolve();
             }
             this.process = null;
+            
+            // Auto-restart se non è stato spento intenzionalmente
+            if (code !== 0 && code !== null) {
+                console.log('[FlareSolverr] Rilevato crash, riavvio automatico tra 5 secondi...');
+                setTimeout(() => this.start(), 5000);
+            }
         });
     }
 

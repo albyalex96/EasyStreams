@@ -2219,11 +2219,11 @@ process.on('SIGINT', () => {
 });
 
 process.on('uncaughtException', (err) => {
-    console.error('[FATAL] Uncaught Exception:', err);
+    console.error('[FATAL] Uncaught Exception:', err.message || err);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('[FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+    console.error('[FATAL] Unhandled Rejection:', reason.message || reason);
 });
 
 
