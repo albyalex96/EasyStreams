@@ -1,49 +1,31 @@
 FROM node:18-slim
 
-# Install system dependencies
+# Install system dependencies for FlareSolverr and Chromium
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    git \
-    python3 \
-    python3-pip \
     curl \
-    # Playwright/Browsers dependencies
-    libgbm-dev \
+    tar \
+    # FlareSolverr/Chromium dependencies
     libnss3 \
-    libasound2 \
-    libxshmfence1 \
-    libx11-xcb1 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxcb1 \
+    libxkbcommon0 \
+    libx11-6 \
     libxcomposite1 \
-    libxcursor1 \
     libxdamage1 \
     libxext6 \
     libxfixes3 \
-    libxi6 \
-    libxrender1 \
-    libxtst6 \
-    libpangocairo-1.0-0 \
-    libpango-1.0-0 \
-    libatk1.0-0 \
-    libc6 \
-    libcairo2 \
-    libcups2 \
-    libdbus-1-3 \
-    libexpat1 \
-    libfontconfig1 \
-    libgcc1 \
-    libgconf-2-4 \
-    libgdk-pixbuf2.0-0 \
-    libglib2.0-0 \
-    libgtk-3-0 \
-    libnspr4 \
-    libstdc++6 \
-    libx11-6 \
-    libxcb1 \
     libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
-
-# Install uv from official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 

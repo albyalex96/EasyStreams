@@ -27,7 +27,8 @@ if (!global.fetch) {
 
 const https = require('https');
 const http = require('http');
-const byparr = require('./byparr_manager');
+const flareManager = require('./flare_manager');
+const { getClearance } = require('./cf_bypass');
 
 const IS_PRODUCTION = false;
 const VERBOSE_LOGS = true;
@@ -147,11 +148,11 @@ app.use((req, res, next) => {
 
 // Global timeout configuration
 const FETCH_TIMEOUT = 10000;
-const STREAM_RESPONSE_TIMEOUT = 10500;
-const DEFAULT_PROVIDER_TIMEOUT = Math.max(1500, STREAM_RESPONSE_TIMEOUT - 500);
-const PROVIDER_TIMEOUT = Math.min(DEFAULT_PROVIDER_TIMEOUT, STREAM_RESPONSE_TIMEOUT);
-const ANIME_PROVIDER_TIMEOUT = 12000;
-const ANIME_STREAM_RESPONSE_TIMEOUT = Math.max(STREAM_RESPONSE_TIMEOUT, ANIME_PROVIDER_TIMEOUT + 1500);
+const STREAM_RESPONSE_TIMEOUT = 45000;
+const DEFAULT_PROVIDER_TIMEOUT = 40000;
+const PROVIDER_TIMEOUT = 40000;
+const ANIME_PROVIDER_TIMEOUT = 40000;
+const ANIME_STREAM_RESPONSE_TIMEOUT = 45000;
 const ENABLE_SERIES_MAPPING_LOOKUP = false;
 const ENABLE_ANIME_FALLBACK_ON_SERIES = false;
 const ENABLE_ANIME_FALLBACK_ON_MOVIES = false;
@@ -1267,7 +1268,11 @@ function getProviderExecutionOrder(type, providerId, requestContext, animeRoutin
         }
     }
 
-    return [...new Set(plan)].filter((name) => providers[name] && typeof providers[name].getStreams === 'function');
+    const finalPlan = [...new Set(plan)].filter((name) => {
+        return providers[name] && typeof providers[name].getStreams === 'function';
+    });
+
+    return finalPlan;
 }
 
 const builder = new addonBuilder({
@@ -1297,6 +1302,11 @@ const builder = new addonBuilder({
             key: 'easyProxyPassword',
             type: 'text',
             title: 'EasyProxy API password'
+        },
+        {
+            key: 'easyProxyPassword',
+            type: 'text',
+            title: 'EasyProxy API password'
         }
     ]
 });
@@ -1312,6 +1322,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
     const season = parsedRequest.season;
     const episode = parsedRequest.episode;
     const requestContext = await resolveProviderRequestContext(type, providerId, season, episode, mappingLanguage, parsedRequest.seasonProvided);
+
     const bypassSeasonZeroCache = shouldBypassStreamCacheForSeasonZero(type, requestContext);
     const cacheEnabledForRequest = ADDON_CACHE_ENABLED && !bypassSeasonZeroCache;
 
@@ -1427,7 +1438,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
 
                 logVerbose(`[${name}] Searching...`);
 
-                const providerTimeoutMs = Math.min(PROVIDER_TIMEOUT, requestStreamTimeout);
+                const providerTimeoutMs = PROVIDER_TIMEOUT;
 
                 let timeoutId;
                 const timeoutPromise = new Promise((resolve) => {
@@ -1993,16 +2004,6 @@ app.get('/', (req, res) => {
                 </div>
 
                 <div class="config-panel">
-                    <div class="config-panel-title">General</div>
-                    <label class="config-toggle" for="easyCatalogsLangIt">
-                        <input type="checkbox" id="easyCatalogsLangIt" name="easyCatalogsLangIt">
-                        <div>
-                            <strong>EasyCatalogs Mode</strong>
-                        </div>
-                    </label>
-                </div>
-
-                <div class="config-panel">
                     <div class="config-panel-title">EasyProxy</div>
                     <label class="config-toggle" for="easyProxyUrl">
                         <div style="width: 100%;">
@@ -2157,37 +2158,42 @@ app.get('/resolve/guardoserie', async (req, res) => {
 
 const PORT = process.env.PORT || 7000;
 
-// Add warmup logic for providers that need Cloudflare bypass
-async function warmup() {
+async function warmupProviders() {
     console.log('[Warmup] Avvio riscaldamento provider...');
-    try {
-        const { getClearance } = require('./cf_bypass');
-        // Riscaldiamo Guardoserie
-        await getClearance('https://guardoserie.team', process.env.IN_DOCKER === 'true');
-        console.log('[Warmup] Guardoserie pronto!');
-    } catch (e) {
-        console.error('[Warmup] Errore riscaldamento:', e.message);
+    const targets = [
+        { name: 'Guardoserie', url: 'https://guardoserie.team/wp-admin/admin-ajax.php' },
+        { name: 'Cinemacity', url: 'https://cinemacity.cc/index.php?do=search' }
+    ];
+
+    for (const target of targets) {
+        try {
+            console.log(`[Warmup] Riscaldamento ${target.name}...`);
+            await getClearance(target.url, target.name.toLowerCase());
+            console.log(`[Warmup] ${target.name} pronto!`);
+        } catch (e) {
+            console.error(`[Warmup] Errore riscaldamento ${target.name}:`, e.message);
+        }
     }
 }
 
 const server = app.listen(PORT, async () => {
     logInfo(`Stremio Addon running at http://localhost:${PORT}`);
     
-    // Avvia Byparr se necessario
+    // Avvia FlareSolverr se necessario
     try {
-        await byparr.start();
+        await flareManager.start();
+        console.log('[FlareSolverr] Pronto.');
+        // Avvia riscaldamento in background
+        warmupProviders().catch(e => console.error('[Warmup] Errore critico:', e));
     } catch (e) {
-        console.error('[Addon] Errore avvio Byparr:', e.message);
+        console.error('[Addon] Errore avvio FlareSolverr:', e.message);
     }
-
-    // Avvia warmup in background
-    warmup();
 });
 
 // Graceful Shutdown
 process.on('SIGTERM', () => {
     logInfo('[Shutdown] SIGTERM received. Closing server...');
-    byparr.stop();
+    flareManager.stop();
     server.close(() => {
         logInfo('[Shutdown] Server closed.');
         httpsAgent.destroy();
@@ -2199,7 +2205,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
     logInfo('[Shutdown] SIGINT received. Closing server...');
-    byparr.stop();
+    flareManager.stop();
     server.close(() => {
         logInfo('[Shutdown] Server closed.');
         httpsAgent.destroy();
@@ -2208,3 +2214,13 @@ process.on('SIGINT', () => {
         process.exit(0);
     });
 });
+
+process.on('uncaughtException', (err) => {
+    console.error('[FATAL] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+
