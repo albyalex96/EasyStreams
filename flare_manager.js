@@ -51,14 +51,25 @@ class FlareSolverrManager {
                     if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
                     const exePath = path.join(this.fsDir, 'flaresolverr');
                     if (fs.existsSync(exePath)) {
-                        fs.chmodSync(exePath, 0o755);
+                        console.log('[FlareSolverr] Impostazione permessi ricorsivi...');
+                        await this.execCommand(`chmod -R 755 '${this.fsDir}'`);
                     }
                 }
                 
+                // Debug: list files and permissions
+                try {
+                    console.log('[FlareSolverr] Verifica file in ' + this.fsDir + ':');
+                    const files = fs.readdirSync(this.fsDir);
+                    files.forEach(file => {
+                        const stats = fs.statSync(path.join(this.fsDir, file));
+                        console.log(` - ${file} [mode: ${stats.mode.toString(8)}]`);
+                    });
+                } catch (de) {}
+
                 // Pulizia zip/tar
                 if (fs.existsSync(this.zipPath)) fs.unlinkSync(this.zipPath);
-                const tarPath = path.join(process.cwd(), 'flaresolverr.tar.gz');
-                if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
+                const tarPathTmp = path.join(process.cwd(), 'flaresolverr.tar.gz');
+                if (fs.existsSync(tarPathTmp)) fs.unlinkSync(tarPathTmp);
                 
                 console.log('[FlareSolverr] Installazione completata.');
             }
@@ -88,7 +99,8 @@ class FlareSolverrManager {
                 this.process = spawn(exePath, [], {
                     cwd: path.dirname(exePath),
                     stdio: 'pipe',
-                    env: { ...process.env, PORT: this.port, HOST: '0.0.0.0', LOG_LEVEL: 'info', HEADLESS: 'true', BROWSER_TIMEOUT: '60000' }
+                    env: { ...process.env, PORT: this.port, HOST: '0.0.0.0', LOG_LEVEL: 'info', HEADLESS: 'true', BROWSER_TIMEOUT: '60000' },
+                    shell: !isWin
                 });
             } catch (spawnError) {
                 console.error('[FlareSolverr] Errore critico durante lo spawn:', spawnError.message);
