@@ -109,6 +109,11 @@ class FlareSolverrManager {
                 ? path.join(this.fsDir, 'flaresolverr.exe')
                 : path.join(this.fsDir, 'flaresolverr');
             
+            // Su Linux, se 'flaresolverr' è una cartella, il binario è dentro
+            if (!isWin && fs.existsSync(exePath) && fs.statSync(exePath).isDirectory()) {
+                exePath = path.join(exePath, 'flaresolverr');
+            }
+
             if (isWin && !fs.existsSync(exePath)) {
                 exePath = path.join(this.fsDir, 'flaresolverr', 'flaresolverr.exe');
             }
@@ -117,6 +122,13 @@ class FlareSolverrManager {
                 console.error('[FlareSolverr] Eseguibile non trovato in:', exePath);
                 this.isStarting = false;
                 return resolve();
+            }
+
+            // Ultimo controllo permessi sul file reale
+            if (!isWin) {
+                try {
+                    fs.chmodSync(exePath, 0o755);
+                } catch (e) {}
             }
 
             try {
