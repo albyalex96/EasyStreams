@@ -2176,10 +2176,9 @@ async function warmupProviders() {
     }
 }
 
-const server = app.listen(PORT, async () => {
-    logInfo(`Stremio Addon running at http://localhost:${PORT}`);
-    
-    // Avvia FlareSolverr se necessario
+let server;
+(async () => {
+    // Avvia FlareSolverr prima di accettare connessioni
     try {
         await flareManager.start();
         console.log('[FlareSolverr] Pronto.');
@@ -2188,7 +2187,11 @@ const server = app.listen(PORT, async () => {
     } catch (e) {
         console.error('[Addon] Errore avvio FlareSolverr:', e.message);
     }
-});
+
+    server = app.listen(PORT, () => {
+        logInfo(`Stremio Addon running at http://localhost:${PORT}`);
+    });
+})();
 
 // Graceful Shutdown
 process.on('SIGTERM', () => {
