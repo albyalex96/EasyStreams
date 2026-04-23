@@ -149,11 +149,11 @@ app.use((req, res, next) => {
 });
 
 // Global timeout configuration
-const FETCH_TIMEOUT = 45000;
+const FETCH_TIMEOUT = 10000;
 const STREAM_RESPONSE_TIMEOUT = 45000;
-const DEFAULT_PROVIDER_TIMEOUT = 45000;
-const PROVIDER_TIMEOUT = 45000;
-const ANIME_PROVIDER_TIMEOUT = 45000;
+const DEFAULT_PROVIDER_TIMEOUT = 40000;
+const PROVIDER_TIMEOUT = 40000;
+const ANIME_PROVIDER_TIMEOUT = 40000;
 const ANIME_STREAM_RESPONSE_TIMEOUT = 45000;
 const ENABLE_SERIES_MAPPING_LOOKUP = false;
 const ENABLE_ANIME_FALLBACK_ON_SERIES = false;
@@ -2163,7 +2163,7 @@ const PORT = process.env.PORT || 7000;
 async function warmupProviders() {
     console.log('[Warmup] Avvio riscaldamento provider...');
     const targets = [
-        { name: 'Guardoserie', url: 'https://guardoserie.work/wp-admin/admin-ajax.php' },
+        { name: 'Guardoserie', url: 'https://guardoserie.garden/wp-admin/admin-ajax.php' },
         { name: 'Cinemacity', url: 'https://cinemacity.cc/index.php?do=search' }
     ];
 
