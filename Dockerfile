@@ -37,11 +37,15 @@ RUN curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor
 
 WORKDIR /app
 
-# 2. Setup FlareSolverr from source and PATCH IT to use system chromedriver (ARM64 fix)
+# 2. Setup FlareSolverr from source and PATCH IT
 RUN git clone https://github.com/FlareSolverr/FlareSolverr.git /app/flaresolverr-src && \
     cd /app/flaresolverr-src && \
-    # Patch to force system chromedriver path
+    # Patch 1: Force system chromedriver path
     sed -i 's/driver_executable_path=driver_exe_path/driver_executable_path="\/usr\/bin\/chromedriver"/' src/utils.py && \
+    # Patch 2: Add headless flags and optimizations
+    sed -i "s|options.add_argument('--no-sandbox')|options.add_argument('--no-sandbox'); options.add_argument('--disable-dev-shm-usage'); options.add_argument('--disable-gpu'); options.add_argument('--headless=new')|" src/utils.py && \
+    # Patch 3: Disable Xvfb by replacing start_xvfb_display() with pass
+    sed -i "s|^\([[:space:]]*\)start_xvfb_display()|\1pass|g" src/utils.py && \
     pip3 install --no-cache-dir -r requirements.txt --break-system-packages
 
 # 3. Environment Settings
