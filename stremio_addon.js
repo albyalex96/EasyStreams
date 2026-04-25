@@ -1,5 +1,6 @@
+const { spawn } = require('child_process');
 
-// Polyfill fetch and related Web APIs for Node.js environments (Must be at the top)
+// Polyfill fetch and related Web APIs
 if (typeof global.Blob === 'undefined') {
     global.Blob = require('node:buffer').Blob;
 }
@@ -1187,6 +1188,7 @@ const providers = {
     animesaturn: require('./src/animesaturn/index.js'),
     streamingcommunity: require('./src/streamingcommunity/index.js'),
     cinemacity: require('./src/cinemacity/index.js'),
+    eurostreaming: require('./src/eurostreaming/index.js'),
 };
 
 function isLikelyAnimeRequest(type, providerId, requestContext) {
@@ -1256,16 +1258,16 @@ function getProviderExecutionOrder(type, providerId, requestContext, animeRoutin
             plan = ['streamingcommunity', 'guardahd', 'guardoserie', 'cinemacity'];
         }
     } else if (normalizedType === 'anime') {
-        plan = ['animeunity', 'animeworld', 'animesaturn', 'guardoserie'];
+        plan = ['animeunity', 'animeworld', 'animesaturn', 'guardoserie', 'eurostreaming'];
     } else {
         if (isImdbRequest) {
             plan = likelyAnime
-                ? ['animeunity', 'animeworld', 'animesaturn', 'guardoserie']
-                : ['streamingcommunity', 'guardoserie', 'cinemacity'];
+                ? ['animeunity', 'animeworld', 'animesaturn', 'guardoserie', 'eurostreaming']
+                : ['streamingcommunity', 'guardoserie', 'cinemacity', 'eurostreaming'];
         } else if (likelyAnime || ENABLE_ANIME_FALLBACK_ON_SERIES) {
-            plan = ['animeunity', 'animeworld', 'animesaturn', 'guardoserie'];
+            plan = ['animeunity', 'animeworld', 'animesaturn', 'guardoserie', 'eurostreaming'];
         } else {
-            plan = ['streamingcommunity', 'guardoserie', 'cinemacity'];
+            plan = ['streamingcommunity', 'guardoserie', 'cinemacity', 'eurostreaming'];
         }
     }
 
@@ -2127,9 +2129,38 @@ app.get('/', (req, res) => {
 app.use('/', addonRouter);
 
 // API per Nuvio / Client-side
+
+// API OCR per Nuvio (risoluzione captcha numerici)
+app.post('/ocr', express.text({ limit: '1mb' }), async (req, res) => {
+    const imgBase64 = req.body;
+    if (!imgBase64) return res.status(400).json({ error: 'Missing image data' });
+    console.log('[OCR] Richiesta risoluzione captcha...');
+    try {
+        const python = spawn('python', ['ocr_helper.py']);
+        let result = '';
+        let error = '';
+        python.stdin.write(imgBase64);
+        python.stdin.end();
+        python.stdout.on('data', (data) => { result += data.toString(); });
+        python.stderr.on('data', (data) => { error += data.toString(); });
+        python.on('close', (code) => {
+            if (code !== 0) {
+                console.error('[OCR] Errore Python:', error);
+                return res.status(500).json({ error: 'OCR engine error' });
+            }
+            const solved = result.trim();
+            console.log('[OCR] Risultato:', solved);
+            res.json({ result: solved });
+        });
+    } catch (e) {
+        console.error('[OCR] Errore critico:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/resolve/:provider', async (req, res) => {
     const { provider: providerName } = req.params;
-    const { id, type, s, ep } = req.query;
+    const { id, type, s, ep, format } = req.query;
 
     if (!id || !type) {
         return res.status(400).json({ error: 'Missing parameters (id, type)' });
@@ -2140,18 +2171,23 @@ app.get('/resolve/:provider', async (req, res) => {
         return res.status(404).json({ error: `Provider '${providerName}' not found` });
     }
 
-    console.log(`[API] Richiesta remota ${providerName}: ${type} ${id} ${s}x${ep}`);
+    console.log(`[API] Richiesta remota ${providerName}: ${type} ${id} ${s}x${ep} [format=${format || "streams"}]`);
 
     try {
         const season = parseInt(s) || 1;
         const episode = parseInt(ep) || 1;
 
-        // Risolviamo il contesto (necessario per TMDB/Kitsu mapping)
         const requestContext = await resolveProviderRequestContext(type, id, season, episode, 'it');
         const providerContext = buildProviderRequestContext(requestContext);
+        if (providerContext) providerContext.format = format || "streams";
 
-        const streams = await provider.getStreams(id, type, season, episode, providerContext);
-        res.json({ streams });
+        const result = await provider.getStreams(id, type, season, episode, providerContext);
+        
+        if (format === 'links') {
+            res.json({ links: result.links || [] });
+        } else {
+            res.json({ streams: Array.isArray(result) ? result : (result.streams || []) });
+        }
     } catch (e) {
         console.error(`[API] Errore risoluzione remota ${providerName}:`, e.message);
         res.status(500).json({ error: e.message });
@@ -2164,7 +2200,8 @@ async function warmupProviders() {
     console.log('[Warmup] Avvio riscaldamento provider...');
     const targets = [
         { name: 'Guardoserie', url: 'https://guardoserie.garden/wp-admin/admin-ajax.php' },
-        { name: 'Cinemacity', url: 'https://cinemacity.cc/index.php?do=search' }
+        { name: 'Cinemacity', url: 'https://cinemacity.cc/index.php?do=search' },
+        { name: 'EuroStreaming', url: 'https://eurostreamings.help/?s=warmup' }
     ];
 
     for (const target of targets) {

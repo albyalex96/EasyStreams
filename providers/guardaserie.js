@@ -7334,6 +7334,251 @@ var require_streamhg = __commonJS({
   }
 });
 
+// src/extractors/maxstream.js
+var require_maxstream = __commonJS({
+  "src/extractors/maxstream.js"(exports2, module2) {
+    var { USER_AGENT, unPack } = require_common();
+    function extractMaxStream(url, refererBase = "https://uprot.net/") {
+      return __async(this, null, function* () {
+        try {
+          let targetUrl = url;
+          if (targetUrl.startsWith("//")) targetUrl = "https:" + targetUrl;
+          if (targetUrl.includes("uprot.net")) {
+            targetUrl = targetUrl.replace("/msf/", "/mse/");
+            const response2 = yield fetch(targetUrl, {
+              headers: {
+                "User-Agent": USER_AGENT,
+                "Referer": refererBase
+              }
+            });
+            if (!response2.ok) return null;
+            const html2 = yield response2.text();
+            const redirectMatch = html2.match(/https?:\/\/(?:www\.)?(?:stayonline\.pro|maxstream\.video)[^"'\s<>\\ ]+/);
+            if (redirectMatch) {
+              targetUrl = redirectMatch[0].replace(/\\/g, "");
+            } else {
+              const jsMatch = html2.match(/window\.location(?:\.href)?\s*=\s*["']([^"']+)["']/);
+              if (jsMatch) {
+                targetUrl = jsMatch[1];
+              } else {
+                const btnMatch = html2.match(/href=["']([^"']+(?:maxstream|stayonline)[^"']*)["']/i);
+                if (btnMatch) {
+                  targetUrl = btnMatch[1];
+                } else {
+                  return null;
+                }
+              }
+            }
+          }
+          const response = yield fetch(targetUrl, {
+            headers: {
+              "User-Agent": USER_AGENT,
+              "Referer": "https://uprot.net/",
+              "Accept-Language": "en-US,en;q=0.5"
+            }
+          });
+          if (!response.ok) return null;
+          const html = yield response.text();
+          const directMatch = html.match(/sources:\s*\[\{src:\s*"([^"]+)"/);
+          if (directMatch) {
+            return {
+              url: directMatch[1],
+              headers: {
+                "User-Agent": USER_AGENT,
+                "Referer": targetUrl
+              }
+            };
+          }
+          const packedRegex = /eval\(function\(p,a,c,k,e,d\)\s*\{.*?\}\s*\('(.*?)',(\d+),(\d+),'(.*?)'\.split\('\|'\),(\d+),(\{\})\)\)/;
+          const match = packedRegex.exec(html);
+          if (match) {
+            const p = match[1];
+            const a = parseInt(match[2]);
+            const c = parseInt(match[3]);
+            const k = match[4].split("|");
+            const unpacked = unPack(p, a, c, k, null, {});
+            const srcMatch = unpacked.match(/src:["']([^"']+)["']/);
+            if (srcMatch) {
+              return {
+                url: srcMatch[1],
+                headers: {
+                  "User-Agent": USER_AGENT,
+                  "Referer": targetUrl
+                }
+              };
+            }
+            try {
+              const urlsetIdx = k.indexOf("urlset");
+              const hlsIdx = k.indexOf("hls");
+              const sourcesIdx = k.indexOf("sources");
+              if (urlsetIdx !== -1 && hlsIdx !== -1 && sourcesIdx !== -1) {
+                const result = k.slice(urlsetIdx + 1, hlsIdx);
+                const reversedElements = result.reverse();
+                const firstPartTerms = k.slice(hlsIdx + 1, sourcesIdx);
+                const reversedFirstPart = firstPartTerms.reverse();
+                let firstUrlPart = "";
+                for (const fp of reversedFirstPart) {
+                  if (fp.includes("0")) {
+                    firstUrlPart += fp;
+                  } else {
+                    firstUrlPart += fp + "-";
+                  }
+                }
+                const baseUrl = `https://${firstUrlPart.replace(/-$/, "")}.host-cdn.net/hls/`;
+                let finalUrl = "";
+                if (reversedElements.length === 1) {
+                  finalUrl = baseUrl + "," + reversedElements[0] + ".urlset/master.m3u8";
+                } else {
+                  finalUrl = baseUrl + reversedElements.join(",") + ".urlset/master.m3u8";
+                }
+                return {
+                  url: finalUrl,
+                  headers: {
+                    "User-Agent": USER_AGENT,
+                    "Referer": targetUrl
+                  }
+                };
+              }
+            } catch (e) {
+              console.error("[Extractors] MaxStream manual reconstruction failed:", e);
+            }
+          }
+          return null;
+        } catch (e) {
+          console.error("[Extractors] MaxStream extraction error:", e);
+          return null;
+        }
+      });
+    }
+    module2.exports = { extractMaxStream };
+  }
+});
+
+// src/extractors/deltabit.js
+var require_deltabit = __commonJS({
+  "src/extractors/deltabit.js"(exports2, module2) {
+    var { USER_AGENT } = require_common();
+    function extractDeltaBit(url, refererBase = "https://eurostreamings.help/") {
+      return __async(this, null, function* () {
+        try {
+          let targetUrl = url;
+          if (targetUrl.startsWith("//")) targetUrl = "https:" + targetUrl;
+          if (targetUrl.includes("safego.cc") || targetUrl.includes("clicka.cc") || targetUrl.includes("clicka.cc/delta")) {
+            const response2 = yield fetch(targetUrl, {
+              headers: {
+                "User-Agent": USER_AGENT,
+                "Referer": refererBase
+              }
+            });
+            if (!response2.ok) return null;
+            const html2 = yield response2.text();
+            const deltabitMatch = html2.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9]+/);
+            if (deltabitMatch) {
+              targetUrl = deltabitMatch[0];
+            } else {
+              const refreshMatch = html2.match(/url=(https?:\/\/deltabit\.[^"']+)/i);
+              if (refreshMatch) {
+                targetUrl = refreshMatch[1];
+              }
+            }
+          }
+          const response = yield fetch(targetUrl, {
+            headers: {
+              "User-Agent": USER_AGENT,
+              "Referer": refererBase
+            }
+          });
+          if (!response.ok) return null;
+          const html = yield response.text();
+          const directMatch = html.match(/sources:\s*\["([^"]+)"/);
+          if (directMatch) {
+            return {
+              url: directMatch[1],
+              headers: {
+                "User-Agent": USER_AGENT,
+                "Referer": targetUrl
+              }
+            };
+          }
+          const opMatch = html.match(/name="op" value="([^"]+)"/);
+          const idMatch = html.match(/name="id" value="([^"]+)"/);
+          if (opMatch && idMatch) {
+            const op = opMatch[1];
+            const id = idMatch[1];
+            const formData = new URLSearchParams();
+            const hiddenRegex = /<input type="hidden" name="([^"]+)" value="([^"]*)"/g;
+            let match;
+            const allFields = {};
+            while ((match = hiddenRegex.exec(html)) !== null) {
+              allFields[match[1]] = match[2];
+            }
+            allFields["op"] = allFields["op"] || op;
+            allFields["id"] = allFields["id"] || id;
+            allFields["imhuman"] = "";
+            allFields["referer"] = targetUrl;
+            for (const key in allFields) {
+              formData.append(key, allFields[key]);
+            }
+            const captchaMatch = html.match(/<img[^>]+src=["']([^"']*captcha[^"']*)["']/i);
+            if (captchaMatch) {
+              let captchaUrl = captchaMatch[1];
+              if (captchaUrl.startsWith("/")) {
+                const urlObj = new URL(targetUrl);
+                captchaUrl = `${urlObj.origin}${captchaUrl}`;
+              }
+              try {
+                const imgResp = yield fetch(captchaUrl, { headers: { "Referer": targetUrl } });
+                const arrayBuffer = yield imgResp.arrayBuffer();
+                const base64 = Buffer.from(arrayBuffer).toString("base64");
+                const ocrApiUrl = "https://easystreams.realbestia.com/ocr";
+                const ocrResp = yield fetch(ocrApiUrl, {
+                  method: "POST",
+                  body: base64,
+                  headers: { "Content-Type": "text/plain" }
+                });
+                const ocrData = yield ocrResp.json();
+                if (ocrData.result) {
+                  console.log(`[DeltaBit] Captcha solved via server: ${ocrData.result}`);
+                  formData.set("code", ocrData.result);
+                }
+              } catch (ocrErr) {
+                console.error("[DeltaBit] OCR Integration failed:", ocrErr.message);
+              }
+            }
+            yield new Promise((resolve) => setTimeout(resolve, 3500));
+            const postResponse = yield fetch(targetUrl, {
+              method: "POST",
+              headers: {
+                "User-Agent": USER_AGENT,
+                "Referer": targetUrl,
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: formData.toString()
+            });
+            if (!postResponse.ok) return null;
+            const postHtml = yield postResponse.text();
+            const finalMatch = postHtml.match(/sources:\s*\["([^"]+)"/);
+            if (finalMatch) {
+              return {
+                url: finalMatch[1],
+                headers: {
+                  "User-Agent": USER_AGENT,
+                  "Referer": targetUrl
+                }
+              };
+            }
+          }
+          return null;
+        } catch (e) {
+          console.error("[Extractors] DeltaBit extraction error:", e);
+          return null;
+        }
+      });
+    }
+    module2.exports = { extractDeltaBit };
+  }
+});
+
 // src/extractors/index.js
 var require_extractors = __commonJS({
   "src/extractors/index.js"(exports2, module2) {
@@ -7347,6 +7592,8 @@ var require_extractors = __commonJS({
     var { extractVixCloud } = require_vixcloud();
     var { extractLoadm } = require_loadm();
     var { extractStreamHG } = require_streamhg();
+    var { extractMaxStream } = require_maxstream();
+    var { extractDeltaBit } = require_deltabit();
     var { USER_AGENT, unPack } = require_common();
     module2.exports = {
       extractMixDrop: extractMixDrop2,
@@ -7359,6 +7606,8 @@ var require_extractors = __commonJS({
       extractVixCloud,
       extractLoadm,
       extractStreamHG,
+      extractMaxStream,
+      extractDeltaBit,
       USER_AGENT,
       unPack
     };
