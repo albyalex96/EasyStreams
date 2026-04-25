@@ -85,6 +85,7 @@ const { addonBuilder, serveHTTP, getRouter } = require('stremio-addon-sdk');
 const express = require('express');
 const app = express();
 const path = require('path');
+let isWarmingUp = true;
 const DISABLE_MIXDROP_ENV =
     typeof process !== 'undefined' &&
         process &&
@@ -93,6 +94,14 @@ const DISABLE_MIXDROP_ENV =
         ? process.env.DISABLE_MIXDROP.trim().toLowerCase()
         : '';
 const DISABLE_MIXDROP_IN_ADDON = !['0', 'false', 'no', 'off'].includes(DISABLE_MIXDROP_ENV);
+// Warmup middleware: reject requests during initialization
+app.use((req, res, next) => {
+    if (isWarmingUp && !req.path.startsWith('/ocr')) {
+        return res.status(503).set('Retry-After', '20').send('Server warming up... please wait 20 seconds.');
+    }
+    next();
+});
+
 const DISABLE_UQLOAD_ENV =
     typeof process !== 'undefined' &&
         process &&
@@ -2213,6 +2222,8 @@ async function warmupProviders() {
             console.error(`[Warmup] Errore riscaldamento ${target.name}:`, e.message);
         }
     }
+    isWarmingUp = false;
+    console.log('[Warmup] Riscaldamento completato. Server pronto ad accettare richieste.');
 }
 
 let server;
