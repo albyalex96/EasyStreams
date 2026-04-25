@@ -419,13 +419,15 @@ var require_cf_handler = __commonJS({
         let currentUrl = url;
         if (session.url) {
           try {
-            const oldUrlObj = new URL(url);
-            const sessUrlObj = new URL(session.url);
-            if (oldUrlObj.hostname !== sessUrlObj.hostname) {
-              console.log(`[CF-HANDLER][${provider}] Rilevato cambio dominio in sessione: ${oldUrlObj.hostname} -> ${sessUrlObj.hostname}`);
-              oldUrlObj.hostname = sessUrlObj.hostname;
-              oldUrlObj.protocol = sessUrlObj.protocol;
-              currentUrl = oldUrlObj.toString();
+            const currentUrlObj = new URL(currentUrl);
+            const sessionUrl = new URL(session.url);
+            const sessionParts = sessionUrl.hostname.split(".");
+            const currentParts = currentUrlObj.hostname.split(".");
+            const sessionRoot = sessionParts.slice(-2).join(".");
+            const currentRoot = currentParts.slice(-2).join(".");
+            if (sessionRoot === currentRoot || currentUrlObj.hostname.includes(sessionParts[sessionParts.length - 2])) {
+              console.log(`[CF-HANDLER][${provider}] Rilevato cambio dominio in sessione: ${currentUrlObj.hostname} -> ${sessionUrl.hostname}`);
+              currentUrl = currentUrl.replace(currentUrlObj.hostname, sessionUrl.hostname);
             }
           } catch (e) {
             console.warn(`[CF-HANDLER][${provider}] Errore durante il check del dominio:`, e.message);

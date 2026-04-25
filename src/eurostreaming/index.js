@@ -13,10 +13,12 @@ if (!IS_SERVER) {
                 const response = await fetch(apiUrl);
                 const data = await response.json();
                 const rawLinks = data.links || [];
+                console.log(`[EuroStreaming-Client] Trovati ${rawLinks.length} link dal server.`);
                 const streams = [];
                 
                 for (const link of rawLinks) {
                     try {
+                        console.log(`[EuroStreaming-Client] Estrazione da: ${link.host} (${link.url})`);
                         let extracted = null;
                         const lower = link.url.toLowerCase();
                         if (lower.includes('maxstream') || lower.includes('uprot.net')) {
@@ -24,10 +26,12 @@ if (!IS_SERVER) {
                         } else if (lower.includes('deltabit') || lower.includes('clicka.cc/delta')) {
                             extracted = await extractDeltaBit(link.url, 'https://eurostreamings.help/');
                         } else if (lower.includes('mixdrop') || lower.includes('m1xdrop')) {
+                            console.log(`[EuroStreaming-Client] MixDrop aggiunto direttamente.`);
                             streams.push({ name: `[EuroStreaming] MixDrop`, url: link.url, quality: 'HD' });
                         }
 
                         if (extracted) {
+                            console.log(`[EuroStreaming-Client] Estrazione riuscita per ${link.host}`);
                             const items = Array.isArray(extracted) ? extracted : [extracted];
                             for (const item of items) {
                                 streams.push({
@@ -37,11 +41,14 @@ if (!IS_SERVER) {
                                     headers: item.headers || {}
                                 });
                             }
+                        } else if (!lower.includes('mixdrop')) {
+                            console.warn(`[EuroStreaming-Client] Estrazione fallita o non supportata per ${link.host}`);
                         }
                     } catch (err) {
-                        console.error('[EuroStreaming-Client] Extraction failed:', err.message);
+                        console.error(`[EuroStreaming-Client] Errore estrazione ${link.host}:`, err.message);
                     }
                 }
+                console.log(`[EuroStreaming-Client] Totale stream pronti: ${streams.length}`);
                 return streams;
             } catch (e) {
                 console.error('[EuroStreaming-Client] API Error:', e.message);
@@ -527,17 +534,87 @@ function makeEasyProxyStream(link, displayName, providerContext) {
 }
 
 async function resolveShortlink(url) {
+    console.log(`[EuroStreaming] Tentativo di risoluzione link breve: ${url}`);
+    
+    // Normalizzazione rapida per MaxStream/uprot
     if (url.includes('uprot.net/msf/')) {
-        return url.replace('/msf/', '/mse/');
+        url = url.replace('/msf/', '/mse/');
     }
-    if (url.includes('clicka.cc/delta/') || url.includes('safego.cc/delta/')) {
+
+    if (url.includes('uprot.net') || url.includes('clicka.cc') || url.includes('safego.cc')) {
         try {
             const html = await fetchHtml(url);
+            
+            // 1. Controllo se c'è un captcha numerico (comune su clicka e uprot)
+            const captchaMatch = html.match(/<img[^>]+src=["']([^"']*(?:captcha|secure)[^"']*)["']/i);
+            const formMatch = html.match(/<form[^>]*method=["']POST["'][^>]*>([\s\S]*?)<\/form>/i);
+            
+            if (captchaMatch && formMatch) {
+                console.log(`[EuroStreaming] Captcha numerico rilevato per ${url}. Risoluzione in corso...`);
+                let captchaUrl = captchaMatch[1];
+                if (captchaUrl.startsWith('/')) {
+                    const urlObj = new URL(url);
+                    captchaUrl = `${urlObj.protocol}//${urlObj.host}${captchaUrl}`;
+                }
+
+                // Scarichiamo l'immagine in base64
+                const imgRes = await fetch(captchaUrl);
+                const imgBuf = await imgRes.arrayBuffer();
+                const base64 = Buffer.from(imgBuf).toString('base64');
+
+                // Chiamiamo il nostro OCR locale
+                const ocrRes = await fetch('http://localhost:7000/ocr', {
+                    method: 'POST',
+                    body: base64
+                });
+                const ocrData = await ocrRes.json();
+                const captchaCode = ocrData.result;
+
+                if (captchaCode) {
+                    console.log(`[EuroStreaming] Captcha risolto: ${captchaCode}. Sblocco link...`);
+                    // Estraiamo i campi hidden del form
+                    const inputs = {};
+                    const inputRegex = /<input[^>]+name=["']([^"']+)["'][^>]+value=["']([^"']*)["']/gi;
+                    let inputMatch;
+                    while ((inputMatch = inputRegex.exec(formMatch[1])) !== null) {
+                        inputs[inputMatch[1]] = inputMatch[2];
+                    }
+                    
+                    // Aggiungiamo il codice del captcha (di solito il campo si chiama 'captcha' o 'adcopy_response')
+                    const captchaFieldName = formMatch[1].match(/name=["']([^"']*(?:captcha|code|response)[^"']*)["']/i)?.[1] || 'captcha';
+                    inputs[captchaFieldName] = captchaCode;
+
+                    // Inviamo il form
+                    const postBody = new URLSearchParams(inputs).toString();
+                    const postRes = await fetch(url, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'Referer': url 
+                        },
+                        body: postBody,
+                        redirect: 'manual'
+                    });
+
+                    const location = postRes.headers.get('location');
+                    if (location) return location;
+                    
+                    const postHtml = await postRes.text();
+                    const finalMatch = postHtml.match(/https?:\/\/(?:deltabit|maxstream|stayonline)\.[a-z]+\/[a-zA-Z0-9]+/);
+                    if (finalMatch) return finalMatch[0];
+                }
+            }
+
+            // 2. Fallback: cerca redirect standard o link diretto nell'HTML
             const deltabitMatch = html.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9]+/);
             if (deltabitMatch) return deltabitMatch[0];
-            const refreshMatch = html.match(/url=(https?:\/\/deltabit\.[^"']+)/i);
+            const maxMatch = html.match(/https?:\/\/(?:maxstream|stayonline)\.[a-z]+\/[a-zA-Z0-9]+/);
+            if (maxMatch) return maxMatch[0];
+            const refreshMatch = html.match(/url=(https?:\/\/(?:deltabit|maxstream|stayonline)\.[^"']+)/i);
             if (refreshMatch) return refreshMatch[1];
-        } catch (e) {}
+        } catch (e) {
+            console.error(`[EuroStreaming] Errore risoluzione shortlink ${url}:`, e.message);
+        }
     }
     return url;
 }

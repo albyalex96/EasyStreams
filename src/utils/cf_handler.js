@@ -64,13 +64,19 @@ async function smartFetch(url, domain, options = {}) {
     // Se la sessione salvata indica un URL diverso (es. redirect di dominio), aggiorniamo l'URL corrente
     if (session.url) {
         try {
-            const oldUrlObj = new URL(url);
-            const sessUrlObj = new URL(session.url);
-            if (oldUrlObj.hostname !== sessUrlObj.hostname) {
-                console.log(`[CF-HANDLER][${provider}] Rilevato cambio dominio in sessione: ${oldUrlObj.hostname} -> ${sessUrlObj.hostname}`);
-                oldUrlObj.hostname = sessUrlObj.hostname;
-                oldUrlObj.protocol = sessUrlObj.protocol;
-                currentUrl = oldUrlObj.toString();
+            const currentUrlObj = new URL(currentUrl);
+            const sessionUrl = new URL(session.url);
+            
+            // ✅ FIX: Sostituisci l'hostname solo se i domini sono simili (stessa radice)
+            // Evita di sostituire domini esterni come uprot.net o mixdrop.co
+            const sessionParts = sessionUrl.hostname.split('.');
+            const currentParts = currentUrlObj.hostname.split('.');
+            const sessionRoot = sessionParts.slice(-2).join('.');
+            const currentRoot = currentParts.slice(-2).join('.');
+            
+            if (sessionRoot === currentRoot || currentUrlObj.hostname.includes(sessionParts[sessionParts.length - 2])) {
+                console.log(`[CF-HANDLER][${provider}] Rilevato cambio dominio in sessione: ${currentUrlObj.hostname} -> ${sessionUrl.hostname}`);
+                currentUrl = currentUrl.replace(currentUrlObj.hostname, sessionUrl.hostname);
             }
         } catch (e) {
             console.warn(`[CF-HANDLER][${provider}] Errore durante il check del dominio:`, e.message);
