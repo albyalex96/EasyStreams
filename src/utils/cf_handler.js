@@ -61,30 +61,26 @@ async function smartFetch(url, domain, options = {}) {
     let session = loadSession();
     let currentUrl = url;
 
-    // Se la sessione salvata indica un URL diverso (es. redirect di dominio), aggiorniamo l'URL corrente
-        if (session.url) {
-            try {
-                const currentUrlObj = new URL(currentUrl);
-                const sessionUrl = new URL(session.url);
-                
-                const currentHost = currentUrlObj.hostname.toLowerCase();
-                const sessionHost = sessionUrl.hostname.toLowerCase();
+    if (session.url) {
+        try {
+            const currentUrlObj = new URL(currentUrl);
+            const sessionUrl = new URL(session.url);
+            const currentHost = currentUrlObj.hostname.toLowerCase();
+            const sessionHost = sessionUrl.hostname.toLowerCase();
 
-                if (sessionHost !== currentHost) {
-                    const sessionParts = sessionHost.split('.');
-                    const currentParts = currentHost.split('.');
-                    const sessionRoot = sessionParts.slice(-2).join('.');
-                    const currentRoot = currentParts.slice(-2).join('.');
-                    
-                    if (sessionRoot === currentRoot || currentHost.includes(sessionParts[sessionParts.length - 2])) {
-                        console.log(`[CF-HANDLER][${provider}] Cambio dominio: ${currentHost} -> ${sessionHost}`);
-                        currentUrl = currentUrl.replace(currentUrlObj.hostname, sessionUrl.hostname);
-                    }
+            if (sessionHost !== currentHost) {
+                const sessionParts = sessionHost.split('.');
+                const currentParts = currentHost.split('.');
+                const sessionRoot = sessionParts.slice(-2).join('.');
+                const currentRoot = currentParts.slice(-2).join('.');
+                
+                if (sessionRoot === currentRoot || currentHost.includes(sessionParts[sessionParts.length - 2])) {
+                    console.log(`[CF-HANDLER][${provider}] Cambio dominio: ${currentHost} -> ${sessionHost}`);
+                    currentUrl = currentUrl.replace(currentUrlObj.hostname, sessionUrl.hostname);
                 }
-            } catch (e) {
-                console.warn(`[CF-HANDLER][${provider}] Errore check dominio:`, e.message);
             }
-        }
+        } catch (e) {}
+    }
 
     const doRequest = async (sess, targetUrl = currentUrl) => {
         const mergedHeaders = {
@@ -167,11 +163,21 @@ async function smartFetch(url, domain, options = {}) {
                 try {
                     const oldUrlObj = new URL(url);
                     const newUrlObj = new URL(newSession.url);
-                    if (oldUrlObj.hostname !== newUrlObj.hostname) {
-                        console.log(`[CF-HANDLER][${provider}] Redirect rilevato durante bypass: ${oldUrlObj.hostname} -> ${newUrlObj.hostname}`);
-                        oldUrlObj.hostname = newUrlObj.hostname;
-                        oldUrlObj.protocol = newUrlObj.protocol;
-                        finalUrl = oldUrlObj.toString();
+                    const oldHost = oldUrlObj.hostname.toLowerCase();
+                    const newHost = newUrlObj.hostname.toLowerCase();
+
+                    if (oldHost !== newHost) {
+                        const oldParts = oldHost.split('.');
+                        const newParts = newHost.split('.');
+                        const oldRoot = oldParts.slice(-2).join('.');
+                        const newRoot = newParts.slice(-2).join('.');
+
+                        if (oldRoot === newRoot || oldHost.includes(newParts[newParts.length - 2])) {
+                            console.log(`[CF-HANDLER][${provider}] Redirect bypass: ${oldHost} -> ${newHost}`);
+                            oldUrlObj.hostname = newUrlObj.hostname;
+                            oldUrlObj.protocol = newUrlObj.protocol;
+                            finalUrl = oldUrlObj.toString();
+                        }
                     }
                 } catch (e) {}
             }
