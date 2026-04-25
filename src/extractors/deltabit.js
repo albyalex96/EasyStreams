@@ -1,4 +1,5 @@
 const { USER_AGENT } = require('./common');
+const { smartFetch } = require('../utils/cf_handler');
 
 async function extractDeltaBit(url, refererBase = 'https://eurostreamings.help/') {
   try {
@@ -7,14 +8,10 @@ async function extractDeltaBit(url, refererBase = 'https://eurostreamings.help/'
 
     // 1. Resolve redirectors (safego.cc, clicka.cc)
     if (targetUrl.includes('safego.cc') || targetUrl.includes('clicka.cc') || targetUrl.includes('clicka.cc/delta')) {
-        const response = await fetch(targetUrl, {
-            headers: {
-                "User-Agent": USER_AGENT,
-                "Referer": refererBase
-            }
+        const html = await smartFetch(targetUrl, 'clicka', {
+            headers: { "User-Agent": USER_AGENT, "Referer": refererBase }
         });
-        if (!response.ok) return null;
-        const html = await response.text();
+        if (!html) return null;
         
         // Simple redirector resolution - look for the final deltabit link
         const deltabitMatch = html.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9]+/);
@@ -30,14 +27,13 @@ async function extractDeltaBit(url, refererBase = 'https://eurostreamings.help/'
     }
 
     // 2. GET the initial page
-    const response = await fetch(targetUrl, {
+    const html = await smartFetch(targetUrl, 'deltabit', {
       headers: {
         "User-Agent": USER_AGENT,
         "Referer": refererBase
       }
     });
-    if (!response.ok) return null;
-    const html = await response.text();
+    if (!html) return null;
 
     // 3. Check for direct sources first
     const directMatch = html.match(/sources:\s*\["([^"]+)"/);
@@ -88,10 +84,12 @@ async function extractDeltaBit(url, refererBase = 'https://eurostreamings.help/'
             }
             
             try {
-                // Fetch captcha image as base64
-                const imgResp = await fetch(captchaUrl, { headers: { "Referer": targetUrl } });
-                const arrayBuffer = await imgResp.arrayBuffer();
-                const base64 = Buffer.from(arrayBuffer).toString('base64');
+                // Fetch captcha image via smartFetch (responseType: arraybuffer)
+                const imgData = await smartFetch(captchaUrl, 'deltabit', { 
+                    headers: { "Referer": targetUrl },
+                    responseType: 'arraybuffer'
+                });
+                const base64 = Buffer.from(imgData).toString('base64');
                 
                 // Call our server's OCR API
                 // We use the same server URL we used for resolve
@@ -116,7 +114,7 @@ async function extractDeltaBit(url, refererBase = 'https://eurostreamings.help/'
         await new Promise(resolve => setTimeout(resolve, 3500));
 
         // POST to get the final page
-        const postResponse = await fetch(targetUrl, {
+        const postHtml = await smartFetch(targetUrl, 'deltabit', {
             method: 'POST',
             headers: {
                 "User-Agent": USER_AGENT,
@@ -126,8 +124,7 @@ async function extractDeltaBit(url, refererBase = 'https://eurostreamings.help/'
             body: formData.toString()
         });
         
-        if (!postResponse.ok) return null;
-        const postHtml = await postResponse.text();
+        if (!postHtml) return null;
         
         const finalMatch = postHtml.match(/sources:\s*\["([^"]+)"/);
         if (finalMatch) {

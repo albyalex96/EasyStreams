@@ -1,54 +1,45 @@
 const { USER_AGENT, unPack } = require('./common');
+const { smartFetch } = require('../utils/cf_handler');
 
 async function extractMaxStream(url, refererBase = 'https://uprot.net/') {
   try {
     let targetUrl = url;
     if (targetUrl.startsWith("//")) targetUrl = "https:" + targetUrl;
 
-    // Handle uprot redirect if necessary
+    // Se è un link uprot.net, cerchiamo il redirect a maxstream/stayonline
     if (targetUrl.includes('uprot.net')) {
-        // Map modern /msf/ to legacy /mse/ alias as seen in EasyProxy
         targetUrl = targetUrl.replace('/msf/', '/mse/');
         
-        const response = await fetch(targetUrl, {
-            headers: {
-                "User-Agent": USER_AGENT,
-                "Referer": refererBase
-            }
+        const html = await smartFetch(targetUrl, 'uprot', {
+            headers: { "User-Agent": USER_AGENT, "Referer": refererBase }
         });
-        if (!response.ok) return null;
-        const html = await response.text();
+        if (!html) return null;
         
-        // Look for MaxStream/StayOnline redirect
         const redirectMatch = html.match(/https?:\/\/(?:www\.)?(?:stayonline\.pro|maxstream\.video)[^"'\s<>\\ ]+/);
         if (redirectMatch) {
             targetUrl = redirectMatch[0].replace(/\\/g, '');
         } else {
-            // Check for window.location or meta refresh
             const jsMatch = html.match(/window\.location(?:\.href)?\s*=\s*["']([^"']+)["']/);
             if (jsMatch) {
                 targetUrl = jsMatch[1];
             } else {
-                // Check for buttons or links as seen in EasyProxy
                 const btnMatch = html.match(/href=["']([^"']+(?:maxstream|stayonline)[^"']*)["']/i);
-                if (btnMatch) {
-                    targetUrl = btnMatch[1];
-                } else {
-                    return null;
-                }
+                if (btnMatch) targetUrl = btnMatch[1];
+                else return null;
             }
         }
     }
 
-    const response = await fetch(targetUrl, {
+    // Carichiamo la pagina finale (maxstream o stayonline)
+    const provider = targetUrl.includes('stayonline') ? 'stayonline' : 'maxstream';
+    const html = await smartFetch(targetUrl, provider, {
       headers: {
         "User-Agent": USER_AGENT,
         "Referer": "https://uprot.net/",
         "Accept-Language": "en-US,en;q=0.5"
       }
     });
-    if (!response.ok) return null;
-    const html = await response.text();
+    if (!html) return null;
 
     // Direct sources check
     const directMatch = html.match(/sources:\s*\[\{src:\s*"([^"]+)"/);

@@ -7331,10 +7331,246 @@ var require_streamhg = __commonJS({
   }
 });
 
+// cf_bypass.js
+var require_cf_bypass = __commonJS({
+  "cf_bypass.js"(exports2, module2) {
+    var fs = require("fs");
+    var path = require("path");
+    var axios = require("axios");
+    var activeBypasses = /* @__PURE__ */ new Map();
+    function getClearance(_0) {
+      return __async(this, arguments, function* (url, provider = "default", options = {}) {
+        const sessionFile = path.join(process.cwd(), `cf-session-${provider}.json`);
+        if (activeBypasses.has(provider)) {
+          console.log(`[CF] FlareSolverr bypass gi\xE0 in corso per il provider [${provider}], attendo...`);
+          return activeBypasses.get(provider);
+        }
+        const bypassPromise = (() => __async(null, null, function* () {
+          var _b;
+          const FLARE_URL = process.env.FLARE_URL || "http://127.0.0.1:8191/v1";
+          console.log(`[CF] Richiesta bypass a FlareSolverr: ${url}`);
+          const payload = {
+            cmd: options.method === "POST" ? "request.post" : "request.get",
+            url,
+            maxTimeout: 6e4
+          };
+          if (options.headers) {
+            const _a = options.headers, { host, Host, cookie, Cookie } = _a, cleanHeaders = __objRest(_a, ["host", "Host", "cookie", "Cookie"]);
+            payload.headers = cleanHeaders;
+          }
+          if (options.method === "POST" && options.body) {
+            payload.postData = options.body;
+          }
+          try {
+            const response = yield axios.post(FLARE_URL, payload, {
+              timeout: 7e4,
+              headers: { "Content-Type": "application/json" }
+            });
+            if (response.data && response.data.status === "ok") {
+              const solution = response.data.solution;
+              if (!solution.cookies || solution.cookies.length === 0) {
+                throw new Error("FlareSolverr ha restituito successo ma zero cookie.");
+              }
+              const cookies = solution.cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+              const cf_clearance = (_b = solution.cookies.find((c) => c.name === "cf_clearance")) == null ? void 0 : _b.value;
+              const data = {
+                userAgent: solution.userAgent,
+                cookies,
+                cf_clearance: cf_clearance || null,
+                url: solution.url,
+                response: solution.response,
+                timestamp: Date.now()
+              };
+              fs.writeFileSync(sessionFile, JSON.stringify(data, null, 2));
+              console.log(`[CF] FlareSolverr: Bypass completato con successo per ${url}`);
+              if (solution.url && solution.url !== url) {
+                console.log(`[CF] Rilevato redirect: ${url} -> ${solution.url}`);
+              }
+              return data;
+            } else {
+              const errorMsg = response.data ? response.data.message : "Risposta non valida da FlareSolverr";
+              throw new Error(errorMsg);
+            }
+          } catch (error) {
+            console.error(`[CF] Errore FlareSolverr: ${error.message}`);
+            if (error.code === "ECONNREFUSED") {
+              console.error(`[CF] ASSICURATI CHE FLARESOLVERR SIA ATTIVO SU ${FLARE_URL}`);
+            }
+            throw error;
+          } finally {
+            activeBypasses.delete(provider);
+          }
+        }))();
+        activeBypasses.set(provider, bypassPromise);
+        return bypassPromise;
+      });
+    }
+    module2.exports = { getClearance };
+  }
+});
+
+// src/utils/cf_handler.js
+var require_cf_handler = __commonJS({
+  "src/utils/cf_handler.js"(exports2, module2) {
+    var axios = require("axios");
+    var fs = require("fs");
+    var path = require("path");
+    var { getClearance } = require_cf_bypass();
+    var https = require("https");
+    var http = require("http");
+    var agentOptions = {
+      keepAlive: true,
+      maxSockets: 250,
+      maxFreeSockets: 100,
+      timeout: 3e4,
+      keepAliveMsecs: 3e4
+    };
+    var httpsAgent = new https.Agent(agentOptions);
+    var httpAgent = new http.Agent(agentOptions);
+    var requestCache = /* @__PURE__ */ new Map();
+    var CACHE_TTL = 6e5;
+    function smartFetch(_0, _1) {
+      return __async(this, arguments, function* (url, domain, options = {}) {
+        const provider = options.provider || domain.replace(/https?:\/\//, "").split(".")[0];
+        const sessionFile = path.join(process.cwd(), `cf-session-${provider}.json`);
+        const cacheKey = `${options.method || "GET"}:${url}:${options.body || ""}`;
+        if (requestCache.has(cacheKey)) {
+          const cached = requestCache.get(cacheKey);
+          if (Date.now() - cached.timestamp < CACHE_TTL) {
+            return cached.data;
+          }
+        }
+        const loadSession = () => {
+          if (fs.existsSync(sessionFile)) {
+            try {
+              const data = JSON.parse(fs.readFileSync(sessionFile, "utf8"));
+              if (data && data.userAgent) {
+                const ageMs = Date.now() - (data.timestamp || 0);
+                const twoHours = 2 * 60 * 60 * 1e3;
+                if (ageMs > twoHours) {
+                  console.log(`[CF-HANDLER][${provider}] Sessione su file troppo vecchia (${Math.round(ageMs / 6e4)} min), forzo refresh.`);
+                  return {};
+                }
+                console.log(`[CF-HANDLER][${provider}] Sessione caricata da file (${Math.round(ageMs / 6e4)} min fa).`);
+                return data;
+              }
+            } catch (e) {
+              return {};
+            }
+          }
+          return {};
+        };
+        let session = loadSession();
+        let currentUrl = url;
+        if (session.url) {
+          try {
+            const currentUrlObj = new URL(currentUrl);
+            const sessionUrl = new URL(session.url);
+            const currentHost = currentUrlObj.hostname.toLowerCase();
+            const sessionHost = sessionUrl.hostname.toLowerCase();
+            if (sessionHost !== currentHost) {
+              const sessionParts = sessionHost.split(".");
+              const currentParts = currentHost.split(".");
+              const sessionRoot = sessionParts.slice(-2).join(".");
+              const currentRoot = currentParts.slice(-2).join(".");
+              if (sessionRoot === currentRoot || currentHost.includes(sessionParts[sessionParts.length - 2])) {
+                console.log(`[CF-HANDLER][${provider}] Cambio dominio: ${currentHost} -> ${sessionHost}`);
+                currentUrl = currentUrl.replace(currentUrlObj.hostname, sessionUrl.hostname);
+              }
+            }
+          } catch (e) {
+          }
+        }
+        const doRequest = (_02, ..._12) => __async(null, [_02, ..._12], function* (sess, targetUrl = currentUrl) {
+          const mergedHeaders = __spreadValues({
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
+          }, options.headers);
+          if (sess.userAgent) {
+            mergedHeaders["User-Agent"] = sess.userAgent;
+          } else if (!mergedHeaders["User-Agent"]) {
+            mergedHeaders["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+          }
+          if (sess.cookies) {
+            const existingCookies = mergedHeaders.Cookie || mergedHeaders.cookie || "";
+            mergedHeaders.Cookie = existingCookies ? existingCookies.endsWith(";") ? `${existingCookies} ${sess.cookies}` : `${existingCookies}; ${sess.cookies}` : sess.cookies;
+          }
+          const response = yield axios(__spreadValues({
+            url: targetUrl,
+            method: options.method || "GET",
+            data: options.body,
+            headers: mergedHeaders,
+            httpsAgent,
+            httpAgent,
+            timeout: options.timeout || 2e4,
+            validateStatus: false,
+            responseType: options.responseType || "text"
+          }, options.axiosConfig));
+          const data = response.data;
+          if (response.status >= 400 && response.status !== 403 && response.status !== 503) {
+            console.error(`[CF-HANDLER][${provider}] Errore HTTP ${response.status} per ${targetUrl}`);
+            const err = new Error(`HTTP ${response.status}`);
+            err.response = { status: response.status, data };
+            throw err;
+          }
+          return { data, status: response.status, headers: response.headers };
+        });
+        try {
+          const res = yield doRequest(session);
+          if (res.status === 403 || res.status === 503) {
+            throw { response: res };
+          }
+          if (session.cookies) {
+            console.log(`[CF-HANDLER][${provider}] Richiesta completata usando sessione esistente.`);
+          }
+          requestCache.set(cacheKey, { data: res.data, timestamp: Date.now() });
+          return res.data;
+        } catch (err) {
+          if (err.response && (err.response.status === 403 || err.response.status === 503)) {
+            if (fs.existsSync(sessionFile)) {
+              try {
+                fs.unlinkSync(sessionFile);
+              } catch (e) {
+              }
+            }
+            const newSession = yield getClearance(url, provider, options);
+            if (!newSession || !newSession.cookies) {
+              throw new Error(`Bypass fallito per ${provider}`);
+            }
+            if (newSession.response) {
+              requestCache.set(cacheKey, { data: newSession.response, timestamp: Date.now() });
+              return newSession.response;
+            }
+            let finalUrl = currentUrl;
+            if (newSession.url) {
+              try {
+                const oldUrlObj = new URL(url);
+                const newUrlObj = new URL(newSession.url);
+                if (oldUrlObj.hostname !== newUrlObj.hostname) {
+                  oldUrlObj.hostname = newUrlObj.hostname;
+                  oldUrlObj.protocol = newUrlObj.protocol;
+                  finalUrl = oldUrlObj.toString();
+                }
+              } catch (e) {
+              }
+            }
+            const res = yield doRequest(newSession, finalUrl);
+            requestCache.set(cacheKey, { data: res.data, timestamp: Date.now() });
+            return res.data;
+          }
+          throw err;
+        }
+      });
+    }
+    module2.exports = { smartFetch };
+  }
+});
+
 // src/extractors/maxstream.js
 var require_maxstream = __commonJS({
   "src/extractors/maxstream.js"(exports2, module2) {
     var { USER_AGENT: USER_AGENT2, unPack: unPack2 } = require_common();
+    var { smartFetch } = require_cf_handler();
     function extractMaxStream2(url, refererBase = "https://uprot.net/") {
       return __async(this, null, function* () {
         try {
@@ -7342,14 +7578,10 @@ var require_maxstream = __commonJS({
           if (targetUrl.startsWith("//")) targetUrl = "https:" + targetUrl;
           if (targetUrl.includes("uprot.net")) {
             targetUrl = targetUrl.replace("/msf/", "/mse/");
-            const response2 = yield fetch(targetUrl, {
-              headers: {
-                "User-Agent": USER_AGENT2,
-                "Referer": refererBase
-              }
+            const html2 = yield smartFetch(targetUrl, "uprot", {
+              headers: { "User-Agent": USER_AGENT2, "Referer": refererBase }
             });
-            if (!response2.ok) return null;
-            const html2 = yield response2.text();
+            if (!html2) return null;
             const redirectMatch = html2.match(/https?:\/\/(?:www\.)?(?:stayonline\.pro|maxstream\.video)[^"'\s<>\\ ]+/);
             if (redirectMatch) {
               targetUrl = redirectMatch[0].replace(/\\/g, "");
@@ -7359,23 +7591,20 @@ var require_maxstream = __commonJS({
                 targetUrl = jsMatch[1];
               } else {
                 const btnMatch = html2.match(/href=["']([^"']+(?:maxstream|stayonline)[^"']*)["']/i);
-                if (btnMatch) {
-                  targetUrl = btnMatch[1];
-                } else {
-                  return null;
-                }
+                if (btnMatch) targetUrl = btnMatch[1];
+                else return null;
               }
             }
           }
-          const response = yield fetch(targetUrl, {
+          const provider = targetUrl.includes("stayonline") ? "stayonline" : "maxstream";
+          const html = yield smartFetch(targetUrl, provider, {
             headers: {
               "User-Agent": USER_AGENT2,
               "Referer": "https://uprot.net/",
               "Accept-Language": "en-US,en;q=0.5"
             }
           });
-          if (!response.ok) return null;
-          const html = yield response.text();
+          if (!html) return null;
           const directMatch = html.match(/sources:\s*\[\{src:\s*"([^"]+)"/);
           if (directMatch) {
             return {
@@ -7455,20 +7684,17 @@ var require_maxstream = __commonJS({
 var require_deltabit = __commonJS({
   "src/extractors/deltabit.js"(exports2, module2) {
     var { USER_AGENT: USER_AGENT2 } = require_common();
+    var { smartFetch } = require_cf_handler();
     function extractDeltaBit2(url, refererBase = "https://eurostreamings.help/") {
       return __async(this, null, function* () {
         try {
           let targetUrl = url;
           if (targetUrl.startsWith("//")) targetUrl = "https:" + targetUrl;
           if (targetUrl.includes("safego.cc") || targetUrl.includes("clicka.cc") || targetUrl.includes("clicka.cc/delta")) {
-            const response2 = yield fetch(targetUrl, {
-              headers: {
-                "User-Agent": USER_AGENT2,
-                "Referer": refererBase
-              }
+            const html2 = yield smartFetch(targetUrl, "clicka", {
+              headers: { "User-Agent": USER_AGENT2, "Referer": refererBase }
             });
-            if (!response2.ok) return null;
-            const html2 = yield response2.text();
+            if (!html2) return null;
             const deltabitMatch = html2.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9]+/);
             if (deltabitMatch) {
               targetUrl = deltabitMatch[0];
@@ -7479,14 +7705,13 @@ var require_deltabit = __commonJS({
               }
             }
           }
-          const response = yield fetch(targetUrl, {
+          const html = yield smartFetch(targetUrl, "deltabit", {
             headers: {
               "User-Agent": USER_AGENT2,
               "Referer": refererBase
             }
           });
-          if (!response.ok) return null;
-          const html = yield response.text();
+          if (!html) return null;
           const directMatch = html.match(/sources:\s*\["([^"]+)"/);
           if (directMatch) {
             return {
@@ -7524,9 +7749,11 @@ var require_deltabit = __commonJS({
                 captchaUrl = `${urlObj.origin}${captchaUrl}`;
               }
               try {
-                const imgResp = yield fetch(captchaUrl, { headers: { "Referer": targetUrl } });
-                const arrayBuffer = yield imgResp.arrayBuffer();
-                const base64 = Buffer.from(arrayBuffer).toString("base64");
+                const imgData = yield smartFetch(captchaUrl, "deltabit", {
+                  headers: { "Referer": targetUrl },
+                  responseType: "arraybuffer"
+                });
+                const base64 = Buffer.from(imgData).toString("base64");
                 const ocrApiUrl = "https://easystreams.realbestia.com/ocr";
                 const ocrResp = yield fetch(ocrApiUrl, {
                   method: "POST",
@@ -7543,7 +7770,7 @@ var require_deltabit = __commonJS({
               }
             }
             yield new Promise((resolve) => setTimeout(resolve, 3500));
-            const postResponse = yield fetch(targetUrl, {
+            const postHtml = yield smartFetch(targetUrl, "deltabit", {
               method: "POST",
               headers: {
                 "User-Agent": USER_AGENT2,
@@ -7552,8 +7779,7 @@ var require_deltabit = __commonJS({
               },
               body: formData.toString()
             });
-            if (!postResponse.ok) return null;
-            const postHtml = yield postResponse.text();
+            if (!postHtml) return null;
             const finalMatch = postHtml.match(/sources:\s*\["([^"]+)"/);
             if (finalMatch) {
               return {

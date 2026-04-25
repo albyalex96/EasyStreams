@@ -7686,6 +7686,7 @@ var require_streamhg = __commonJS({
 var require_maxstream = __commonJS({
   "src/extractors/maxstream.js"(exports2, module2) {
     var { USER_AGENT: USER_AGENT2, unPack } = require_common();
+    var { smartFetch: smartFetch2 } = require_cf_handler();
     function extractMaxStream(url, refererBase = "https://uprot.net/") {
       return __async(this, null, function* () {
         try {
@@ -7693,14 +7694,10 @@ var require_maxstream = __commonJS({
           if (targetUrl.startsWith("//")) targetUrl = "https:" + targetUrl;
           if (targetUrl.includes("uprot.net")) {
             targetUrl = targetUrl.replace("/msf/", "/mse/");
-            const response2 = yield fetch(targetUrl, {
-              headers: {
-                "User-Agent": USER_AGENT2,
-                "Referer": refererBase
-              }
+            const html2 = yield smartFetch2(targetUrl, "uprot", {
+              headers: { "User-Agent": USER_AGENT2, "Referer": refererBase }
             });
-            if (!response2.ok) return null;
-            const html2 = yield response2.text();
+            if (!html2) return null;
             const redirectMatch = html2.match(/https?:\/\/(?:www\.)?(?:stayonline\.pro|maxstream\.video)[^"'\s<>\\ ]+/);
             if (redirectMatch) {
               targetUrl = redirectMatch[0].replace(/\\/g, "");
@@ -7710,23 +7707,20 @@ var require_maxstream = __commonJS({
                 targetUrl = jsMatch[1];
               } else {
                 const btnMatch = html2.match(/href=["']([^"']+(?:maxstream|stayonline)[^"']*)["']/i);
-                if (btnMatch) {
-                  targetUrl = btnMatch[1];
-                } else {
-                  return null;
-                }
+                if (btnMatch) targetUrl = btnMatch[1];
+                else return null;
               }
             }
           }
-          const response = yield fetch(targetUrl, {
+          const provider = targetUrl.includes("stayonline") ? "stayonline" : "maxstream";
+          const html = yield smartFetch2(targetUrl, provider, {
             headers: {
               "User-Agent": USER_AGENT2,
               "Referer": "https://uprot.net/",
               "Accept-Language": "en-US,en;q=0.5"
             }
           });
-          if (!response.ok) return null;
-          const html = yield response.text();
+          if (!html) return null;
           const directMatch = html.match(/sources:\s*\[\{src:\s*"([^"]+)"/);
           if (directMatch) {
             return {
@@ -7806,20 +7800,17 @@ var require_maxstream = __commonJS({
 var require_deltabit = __commonJS({
   "src/extractors/deltabit.js"(exports2, module2) {
     var { USER_AGENT: USER_AGENT2 } = require_common();
+    var { smartFetch: smartFetch2 } = require_cf_handler();
     function extractDeltaBit(url, refererBase = "https://eurostreamings.help/") {
       return __async(this, null, function* () {
         try {
           let targetUrl = url;
           if (targetUrl.startsWith("//")) targetUrl = "https:" + targetUrl;
           if (targetUrl.includes("safego.cc") || targetUrl.includes("clicka.cc") || targetUrl.includes("clicka.cc/delta")) {
-            const response2 = yield fetch(targetUrl, {
-              headers: {
-                "User-Agent": USER_AGENT2,
-                "Referer": refererBase
-              }
+            const html2 = yield smartFetch2(targetUrl, "clicka", {
+              headers: { "User-Agent": USER_AGENT2, "Referer": refererBase }
             });
-            if (!response2.ok) return null;
-            const html2 = yield response2.text();
+            if (!html2) return null;
             const deltabitMatch = html2.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9]+/);
             if (deltabitMatch) {
               targetUrl = deltabitMatch[0];
@@ -7830,14 +7821,13 @@ var require_deltabit = __commonJS({
               }
             }
           }
-          const response = yield fetch(targetUrl, {
+          const html = yield smartFetch2(targetUrl, "deltabit", {
             headers: {
               "User-Agent": USER_AGENT2,
               "Referer": refererBase
             }
           });
-          if (!response.ok) return null;
-          const html = yield response.text();
+          if (!html) return null;
           const directMatch = html.match(/sources:\s*\["([^"]+)"/);
           if (directMatch) {
             return {
@@ -7875,9 +7865,11 @@ var require_deltabit = __commonJS({
                 captchaUrl = `${urlObj.origin}${captchaUrl}`;
               }
               try {
-                const imgResp = yield fetch(captchaUrl, { headers: { "Referer": targetUrl } });
-                const arrayBuffer = yield imgResp.arrayBuffer();
-                const base64 = Buffer.from(arrayBuffer).toString("base64");
+                const imgData = yield smartFetch2(captchaUrl, "deltabit", {
+                  headers: { "Referer": targetUrl },
+                  responseType: "arraybuffer"
+                });
+                const base64 = Buffer.from(imgData).toString("base64");
                 const ocrApiUrl = "https://easystreams.realbestia.com/ocr";
                 const ocrResp = yield fetch(ocrApiUrl, {
                   method: "POST",
@@ -7894,7 +7886,7 @@ var require_deltabit = __commonJS({
               }
             }
             yield new Promise((resolve) => setTimeout(resolve, 3500));
-            const postResponse = yield fetch(targetUrl, {
+            const postHtml = yield smartFetch2(targetUrl, "deltabit", {
               method: "POST",
               headers: {
                 "User-Agent": USER_AGENT2,
@@ -7903,8 +7895,7 @@ var require_deltabit = __commonJS({
               },
               body: formData.toString()
             });
-            if (!postResponse.ok) return null;
-            const postHtml = yield postResponse.text();
+            if (!postHtml) return null;
             const finalMatch = postHtml.match(/sources:\s*\["([^"]+)"/);
             if (finalMatch) {
               return {
