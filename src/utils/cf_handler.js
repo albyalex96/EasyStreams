@@ -114,7 +114,9 @@ async function smartFetch(url, domain, options = {}) {
             httpsAgent,
             httpAgent,
             timeout: options.timeout || 20000,
-            validateStatus: false
+            validateStatus: false,
+            responseType: options.responseType || 'text',
+            ...options.axiosConfig
         });
 
         const data = response.data;

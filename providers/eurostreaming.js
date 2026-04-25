@@ -446,7 +446,7 @@ var require_cf_handler = __commonJS({
             const existingCookies = mergedHeaders.Cookie || mergedHeaders.cookie || "";
             mergedHeaders.Cookie = existingCookies ? existingCookies.endsWith(";") ? `${existingCookies} ${sess.cookies}` : `${existingCookies}; ${sess.cookies}` : sess.cookies;
           }
-          const response = yield axios({
+          const response = yield axios(__spreadValues({
             url: targetUrl,
             method: options.method || "GET",
             data: options.body,
@@ -454,8 +454,9 @@ var require_cf_handler = __commonJS({
             httpsAgent,
             httpAgent,
             timeout: options.timeout || 2e4,
-            validateStatus: false
-          });
+            validateStatus: false,
+            responseType: options.responseType || "text"
+          }, options.axiosConfig));
           const data = response.data;
           if (response.status >= 400 && response.status !== 403 && response.status !== 503) {
             console.error(`[CF-HANDLER][${provider}] Errore HTTP ${response.status} per ${targetUrl}`);
@@ -7961,6 +7962,48 @@ var require_extractors = __commonJS({
   }
 });
 
+// src/utils/ocr.js
+var require_ocr = __commonJS({
+  "src/utils/ocr.js"(exports2, module2) {
+    function solveNumericCaptcha2(imgBase64) {
+      return __async(this, null, function* () {
+        const { spawn } = require("child_process");
+        return new Promise((resolve, reject) => {
+          try {
+            const cleanBase64 = imgBase64.includes(",") ? imgBase64.split(",")[1] : imgBase64;
+            const python = spawn("python", ["ocr_helper.py"]);
+            let result = "";
+            let error = "";
+            python.stdin.write(cleanBase64);
+            python.stdin.end();
+            python.stdout.on("data", (data) => {
+              result += data.toString();
+            });
+            python.stderr.on("data", (data) => {
+              error += data.toString();
+            });
+            python.on("close", (code) => {
+              if (code !== 0) {
+                console.error("[OCR] Errore processo Python:", error);
+                return reject(new Error("OCR engine error"));
+              }
+              const solved = result.trim();
+              resolve(solved);
+            });
+            python.on("error", (err) => {
+              console.error("[OCR] Errore avvio Python:", err.message);
+              reject(err);
+            });
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+    }
+    module2.exports = { solveNumericCaptcha: solveNumericCaptcha2 };
+  }
+});
+
 // src/eurostreaming/index.js
 var { formatStream } = require_formatter();
 var { checkQualityFromPlaylist } = require_quality_helper();
@@ -8021,6 +8064,14 @@ if (!IS_SERVER) {
 var BASE_URL = "https://eurostreamings.help";
 var PROVIDER = "eurostreaming";
 var TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
+var solveNumericCaptcha = null;
+if (IS_SERVER) {
+  try {
+    solveNumericCaptcha = require_ocr().solveNumericCaptcha;
+  } catch (e) {
+    console.error("[EuroStreaming] Errore caricamento modulo OCR:", e.message);
+  }
+}
 var STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || "").trim().toLowerCase() === "1";
 function getMappingApiBase() {
   return "https://animemapping.realbestia.com";
@@ -8443,15 +8494,13 @@ function resolveShortlink(url) {
             const urlObj = new URL(url);
             captchaUrl = `${urlObj.protocol}//${urlObj.host}${captchaUrl}`;
           }
-          const imgRes = yield fetch(captchaUrl);
-          const imgBuf = yield imgRes.arrayBuffer();
-          const base64 = Buffer.from(imgBuf).toString("base64");
-          const ocrRes = yield fetch("http://localhost:7000/ocr", {
-            method: "POST",
-            body: base64
+          const imgData = yield smartFetch(captchaUrl, BASE_URL, {
+            provider: PROVIDER,
+            responseType: "arraybuffer"
+            // Dobbiamo assicurarci che smartFetch supporti o passi axios config
           });
-          const ocrData = yield ocrRes.json();
-          const captchaCode = ocrData.result;
+          const base64 = Buffer.isBuffer(imgData) ? imgData.toString("base64") : Buffer.from(imgData).toString("base64");
+          const captchaCode = yield solveNumericCaptcha(base64);
           if (captchaCode) {
             console.log(`[EuroStreaming] Captcha risolto: ${captchaCode}. Sblocco link...`);
             const inputs = {};
@@ -8463,25 +8512,24 @@ function resolveShortlink(url) {
             const captchaFieldName = ((_a = formMatch[1].match(/name=["']([^"']*(?:captcha|code|response)[^"']*)["']/i)) == null ? void 0 : _a[1]) || "captcha";
             inputs[captchaFieldName] = captchaCode;
             const postBody = new URLSearchParams(inputs).toString();
-            const postRes = yield fetch(url, {
+            const postHtml = yield smartFetch(url, BASE_URL, {
               method: "POST",
+              provider: PROVIDER,
               headers: {
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Referer": url
               },
-              body: postBody,
-              redirect: "manual"
+              body: postBody
             });
-            const location = postRes.headers.get("location");
-            if (location) return location;
-            const postHtml = yield postRes.text();
-            const finalMatch = postHtml.match(/https?:\/\/(?:deltabit|maxstream|stayonline)\.[a-z]+\/[a-zA-Z0-9]+/);
+            const finalMatch = postHtml.match(/https?:\/\/(?:deltabit|maxstream|stayonline)\.[a-z]+\/[a-zA-Z0-9\/=_+-]+/);
             if (finalMatch) return finalMatch[0];
           }
         }
-        const deltabitMatch = html.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9]+/);
+        const linkMatch = html.match(/href=["'](https?:\/\/(?:maxstream|stayonline|deltabit)[^"']+)["']/i);
+        if (linkMatch) return linkMatch[1];
+        const deltabitMatch = html.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9\/=_+-]+/);
         if (deltabitMatch) return deltabitMatch[0];
-        const maxMatch = html.match(/https?:\/\/(?:maxstream|stayonline)\.[a-z]+\/[a-zA-Z0-9]+/);
+        const maxMatch = html.match(/https?:\/\/(?:maxstream|stayonline)\.[a-z]+\/[a-zA-Z0-9\/=_+-]+/);
         if (maxMatch) return maxMatch[0];
         const refreshMatch = html.match(/url=(https?:\/\/(?:deltabit|maxstream|stayonline)\.[^"']+)/i);
         if (refreshMatch) return refreshMatch[1];

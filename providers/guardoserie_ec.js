@@ -447,7 +447,7 @@ var require_cf_handler = __commonJS({
             const existingCookies = mergedHeaders.Cookie || mergedHeaders.cookie || "";
             mergedHeaders.Cookie = existingCookies ? existingCookies.endsWith(";") ? `${existingCookies} ${sess.cookies}` : `${existingCookies}; ${sess.cookies}` : sess.cookies;
           }
-          const response = yield axios({
+          const response = yield axios(__spreadValues({
             url: targetUrl,
             method: options.method || "GET",
             data: options.body,
@@ -455,8 +455,9 @@ var require_cf_handler = __commonJS({
             httpsAgent,
             httpAgent,
             timeout: options.timeout || 2e4,
-            validateStatus: false
-          });
+            validateStatus: false,
+            responseType: options.responseType || "text"
+          }, options.axiosConfig));
           const data = response.data;
           if (response.status >= 400 && response.status !== 403 && response.status !== 503) {
             console.error(`[CF-HANDLER][${provider}] Errore HTTP ${response.status} per ${targetUrl}`);

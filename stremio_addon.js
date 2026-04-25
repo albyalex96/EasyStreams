@@ -1,3 +1,4 @@
+const { solveNumericCaptcha } = require('./src/utils/ocr');
 const { spawn } = require('child_process');
 
 // Polyfill fetch and related Web APIs
@@ -2145,22 +2146,9 @@ app.post('/ocr', express.text({ limit: '1mb' }), async (req, res) => {
     if (!imgBase64) return res.status(400).json({ error: 'Missing image data' });
     console.log('[OCR] Richiesta risoluzione captcha...');
     try {
-        const python = spawn('python', ['ocr_helper.py']);
-        let result = '';
-        let error = '';
-        python.stdin.write(imgBase64);
-        python.stdin.end();
-        python.stdout.on('data', (data) => { result += data.toString(); });
-        python.stderr.on('data', (data) => { error += data.toString(); });
-        python.on('close', (code) => {
-            if (code !== 0) {
-                console.error('[OCR] Errore Python:', error);
-                return res.status(500).json({ error: 'OCR engine error' });
-            }
-            const solved = result.trim();
-            console.log('[OCR] Risultato:', solved);
-            res.json({ result: solved });
-        });
+        const solved = await solveNumericCaptcha(imgBase64);
+        console.log('[OCR] Risultato:', solved);
+        res.json({ result: solved });
     } catch (e) {
         console.error('[OCR] Errore critico:', e.message);
         res.status(500).json({ error: e.message });

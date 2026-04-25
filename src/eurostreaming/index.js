@@ -62,6 +62,15 @@ if (!IS_SERVER) {
 const BASE_URL = 'https://eurostreamings.help';
 const PROVIDER = 'eurostreaming';
 const TMDB_API_KEY = '68e094699525b18a70bab2f86b1fa706';
+
+let solveNumericCaptcha = null;
+if (IS_SERVER) {
+    try {
+        solveNumericCaptcha = require('../utils/ocr').solveNumericCaptcha;
+    } catch (e) {
+        console.error('[EuroStreaming] Errore caricamento modulo OCR:', e.message);
+    }
+}
 const STEP_BENCH_ENABLED = String(process.env.PROVIDER_STEP_BENCH || '').trim().toLowerCase() === '1';
 
 function getMappingApiBase() {
@@ -557,22 +566,21 @@ async function resolveShortlink(url) {
                     captchaUrl = `${urlObj.protocol}//${urlObj.host}${captchaUrl}`;
                 }
 
-                // Scarichiamo l'immagine in base64
-                const imgRes = await fetch(captchaUrl);
-                const imgBuf = await imgRes.arrayBuffer();
-                const base64 = Buffer.from(imgBuf).toString('base64');
-
-                // Chiamiamo il nostro OCR locale
-                const ocrRes = await fetch('http://localhost:7000/ocr', {
-                    method: 'POST',
-                    body: base64
+                // Scarichiamo l'immagine in base64 tramite smartFetch
+                const imgData = await smartFetch(captchaUrl, BASE_URL, {
+                    provider: PROVIDER,
+                    responseType: 'arraybuffer' // Dobbiamo assicurarci che smartFetch supporti o passi axios config
                 });
-                const ocrData = await ocrRes.json();
-                const captchaCode = ocrData.result;
+                // Nota: smartFetch restituisce res.data (stringa o buffer)
+                const base64 = Buffer.isBuffer(imgData) 
+                    ? imgData.toString('base64') 
+                    : Buffer.from(imgData).toString('base64');
+
+                // Chiamiamo il nostro OCR locale direttamente
+                const captchaCode = await solveNumericCaptcha(base64);
 
                 if (captchaCode) {
                     console.log(`[EuroStreaming] Captcha risolto: ${captchaCode}. Sblocco link...`);
-                    // Estraiamo i campi hidden del form
                     const inputs = {};
                     const inputRegex = /<input[^>]+name=["']([^"']+)["'][^>]+value=["']([^"']*)["']/gi;
                     let inputMatch;
@@ -580,35 +588,33 @@ async function resolveShortlink(url) {
                         inputs[inputMatch[1]] = inputMatch[2];
                     }
                     
-                    // Aggiungiamo il codice del captcha (di solito il campo si chiama 'captcha' o 'adcopy_response')
                     const captchaFieldName = formMatch[1].match(/name=["']([^"']*(?:captcha|code|response)[^"']*)["']/i)?.[1] || 'captcha';
                     inputs[captchaFieldName] = captchaCode;
 
-                    // Inviamo il form
+                    // Inviamo il form tramite smartFetch (POST)
                     const postBody = new URLSearchParams(inputs).toString();
-                    const postRes = await fetch(url, {
+                    const postHtml = await smartFetch(url, BASE_URL, {
                         method: 'POST',
+                        provider: PROVIDER,
                         headers: { 
                             'Content-Type': 'application/x-www-form-urlencoded',
                             'Referer': url 
                         },
-                        body: postBody,
-                        redirect: 'manual'
+                        body: postBody
                     });
 
-                    const location = postRes.headers.get('location');
-                    if (location) return location;
-                    
-                    const postHtml = await postRes.text();
-                    const finalMatch = postHtml.match(/https?:\/\/(?:deltabit|maxstream|stayonline)\.[a-z]+\/[a-zA-Z0-9]+/);
+                    const finalMatch = postHtml.match(/https?:\/\/(?:deltabit|maxstream|stayonline)\.[a-z]+\/[a-zA-Z0-9\/=_+-]+/);
                     if (finalMatch) return finalMatch[0];
                 }
             }
 
-            // 2. Fallback: cerca redirect standard o link diretto nell'HTML
-            const deltabitMatch = html.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9]+/);
+            // 2. Fallback: cerca link in bottoni/ancore o redirect standard
+            const linkMatch = html.match(/href=["'](https?:\/\/(?:maxstream|stayonline|deltabit)[^"']+)["']/i);
+            if (linkMatch) return linkMatch[1];
+
+            const deltabitMatch = html.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9\/=_+-]+/);
             if (deltabitMatch) return deltabitMatch[0];
-            const maxMatch = html.match(/https?:\/\/(?:maxstream|stayonline)\.[a-z]+\/[a-zA-Z0-9]+/);
+            const maxMatch = html.match(/https?:\/\/(?:maxstream|stayonline)\.[a-z]+\/[a-zA-Z0-9\/=_+-]+/);
             if (maxMatch) return maxMatch[0];
             const refreshMatch = html.match(/url=(https?:\/\/(?:deltabit|maxstream|stayonline)\.[^"']+)/i);
             if (refreshMatch) return refreshMatch[1];
