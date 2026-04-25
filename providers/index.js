@@ -8159,7 +8159,6 @@ var require_cf_handler = __commonJS({
           return res.data;
         } catch (err) {
           if (err.response && (err.response.status === 403 || err.response.status === 503)) {
-            console.warn(`[CF-HANDLER][${provider}] Blocco rilevato o sessione scaduta. Avvio bypass per ${url}...`);
             if (fs.existsSync(sessionFile)) {
               try {
                 fs.unlinkSync(sessionFile);
@@ -8168,10 +8167,9 @@ var require_cf_handler = __commonJS({
             }
             const newSession = yield getClearance(url, provider, options);
             if (!newSession || !newSession.cookies) {
-              throw new Error(`Bypass fallito per ${provider}: FlareSolverr non ha restituito cookie validi.`);
+              throw new Error(`Bypass fallito per ${provider}`);
             }
             if (newSession.response) {
-              console.log(`[CF-HANDLER][${provider}] Uso risposta diretta da FlareSolverr.`);
               requestCache.set(cacheKey, { data: newSession.response, timestamp: Date.now() });
               return newSession.response;
             }
@@ -8180,27 +8178,15 @@ var require_cf_handler = __commonJS({
               try {
                 const oldUrlObj = new URL(url);
                 const newUrlObj = new URL(newSession.url);
-                const oldHost = oldUrlObj.hostname.toLowerCase();
-                const newHost = newUrlObj.hostname.toLowerCase();
-                if (oldHost !== newHost) {
-                  const oldParts = oldHost.split(".");
-                  const newParts = newHost.split(".");
-                  const oldRoot = oldParts.slice(-2).join(".");
-                  const newRoot = newParts.slice(-2).join(".");
-                  if (oldRoot === newRoot || oldHost.includes(newParts[newParts.length - 2])) {
-                    console.log(`[CF-HANDLER][${provider}] Redirect bypass: ${oldHost} -> ${newHost}`);
-                    oldUrlObj.hostname = newUrlObj.hostname;
-                    oldUrlObj.protocol = newUrlObj.protocol;
-                    finalUrl = oldUrlObj.toString();
-                  }
+                if (oldUrlObj.hostname !== newUrlObj.hostname) {
+                  oldUrlObj.hostname = newUrlObj.hostname;
+                  oldUrlObj.protocol = newUrlObj.protocol;
+                  finalUrl = oldUrlObj.toString();
                 }
               } catch (e) {
               }
             }
             const res = yield doRequest(newSession, finalUrl);
-            if (res.status === 403 || res.status === 503) {
-              throw new Error(`Bypass inefficace per ${provider}: il sito continua a restituire ${res.status}`);
-            }
             requestCache.set(cacheKey, { data: res.data, timestamp: Date.now() });
             return res.data;
           }
@@ -13060,7 +13046,9 @@ var require_eurostreaming = __commonJS({
     }
     function searchProvider(info) {
       return __async(this, null, function* () {
-        const queries = [...new Set([info.title, info.originalTitle, ...info.titleHints || []].filter((q) => q && q.length > 1))].slice(0, 3);
+        const queries = [...new Set(
+          [info.title, info.originalTitle, ...info.titleHints || []].filter((q) => q && q.length > 1).map((q) => q.replace(/[^\x00-\x7F]/g, "").trim()).filter((q) => q.length > 1)
+        )].slice(0, 3);
         const pages = yield Promise.all(queries.map((q) => fetchHtml(`${BASE_URL}/?s=${encodeURIComponent(q)}`).catch(() => "")));
         return pages.flatMap(extractSearchResults);
       });
@@ -13351,12 +13339,18 @@ var require_eurostreaming = __commonJS({
           }
           const isStremioAddon = providerContext && providerContext.__requestContext === true;
           if (isStremioAddon) {
-            const resolvedLinks = yield Promise.all(links.map((l) => __async(null, null, function* () {
-              return {
-                host: l.host,
-                url: yield resolveShortlink(l.url)
-              };
-            })));
+            const resolvedLinks = [];
+            for (const l of links) {
+              try {
+                resolvedLinks.push({
+                  host: l.host,
+                  url: yield resolveShortlink(l.url)
+                });
+              } catch (e) {
+                console.error(`[EuroStreaming] Fallita risoluzione per ${l.url}:`, e.message);
+                resolvedLinks.push({ host: l.host, url: l.url });
+              }
+            }
             streams = resolvedLinks.map((l) => ({
               url: l.url,
               host: l.host,

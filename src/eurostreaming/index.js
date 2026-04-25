@@ -361,7 +361,11 @@ function extractSearchResults(html) {
 }
 
 async function searchProvider(info) {
-    const queries = [...new Set([info.title, info.originalTitle, ...(info.titleHints || [])].filter(q => q && q.length > 1))].slice(0, 3);
+    const queries = [...new Set([info.title, info.originalTitle, ...(info.titleHints || [])]
+        .filter(q => q && q.length > 1)
+        .map(q => q.replace(/[^\x00-\x7F]/g, '').trim()) // Rimuovi caratteri non-ASCII
+        .filter(q => q.length > 1)
+    )].slice(0, 3);
     const pages = await Promise.all(queries.map(q => fetchHtml(`${BASE_URL}/?s=${encodeURIComponent(q)}`).catch(() => '')));
     return pages.flatMap(extractSearchResults);
 }

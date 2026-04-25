@@ -138,75 +138,37 @@ async function smartFetch(url, domain, options = {}) {
         return res.data;
     } catch (err) {
         if (err.response && (err.response.status === 403 || err.response.status === 503)) {
-            // Se c'è già un bypass in corso per questo provider, aspettiamo quello
-            if (bypassLocks.has(provider)) {
-                console.log(`[CF-HANDLER][${provider}] Bypass già in corso. Attendo...`);
-                const sessionFromLock = await bypassLocks.get(provider);
-                return await doRequest(sessionFromLock);
+            // Usiamo direttamente getClearance che ha già il suo sistema di lock interno
+            if (fs.existsSync(sessionFile)) {
+                try { fs.unlinkSync(sessionFile); } catch (e) {}
             }
 
-            // Altrimenti avviamo un nuovo bypass e salviamo la promessa nel lock
-            const bypassPromise = (async () => {
-                console.warn(`[CF-HANDLER][${provider}] Blocco rilevato. Avvio bypass per ${url}...`);
-                
-                if (fs.existsSync(sessionFile)) {
-                    try { fs.unlinkSync(sessionFile); } catch (e) {}
-                }
-
-                const newSession = await getClearance(url, provider, options);
-                if (!newSession || !newSession.cookies) {
-                    throw new Error(`Bypass fallito per ${provider}`);
-                }
-                
-                // Se FlareSolverr ha già la risposta, restituiamola subito (ma solo la prima volta)
-                return newSession;
-            })();
-
-            bypassLocks.set(provider, bypassPromise);
-
-            try {
-                const newSession = await bypassPromise;
-                
-                // Una volta completato, puliamo il lock dopo un piccolo delay per dare tempo ad altri di leggere
-                setTimeout(() => bypassLocks.delete(provider), 5000);
-
-                if (newSession.response) {
-                    console.log(`[CF-HANDLER][${provider}] Uso risposta diretta da FlareSolverr.`);
-                    requestCache.set(cacheKey, { data: newSession.response, timestamp: Date.now() });
-                    return newSession.response;
-                }
-
-                let finalUrl = currentUrl;
-                if (newSession.url) {
-                    try {
-                        const oldUrlObj = new URL(url);
-                        const newUrlObj = new URL(newSession.url);
-                        const oldHost = oldUrlObj.hostname.toLowerCase();
-                        const newHost = newUrlObj.hostname.toLowerCase();
-
-                        if (oldHost !== newHost) {
-                            const oldParts = oldHost.split('.');
-                            const newParts = newHost.split('.');
-                            const oldRoot = oldParts.slice(-2).join('.');
-                            const newRoot = newParts.slice(-2).join('.');
-
-                            if (oldRoot === newRoot || oldHost.includes(newParts[newParts.length - 2])) {
-                                console.log(`[CF-HANDLER][${provider}] Redirect bypass: ${oldHost} -> ${newHost}`);
-                                oldUrlObj.hostname = newUrlObj.hostname;
-                                oldUrlObj.protocol = newUrlObj.protocol;
-                                finalUrl = oldUrlObj.toString();
-                            }
-                        }
-                    } catch (e) {}
-                }
-
-                const res = await doRequest(newSession, finalUrl);
-                requestCache.set(cacheKey, { data: res.data, timestamp: Date.now() });
-                return res.data;
-            } finally {
-                // Assicuriamoci di pulire il lock se non è già stato fatto
-                // bypassLocks.delete(provider);
+            const newSession = await getClearance(url, provider, options);
+            if (!newSession || !newSession.cookies) {
+                throw new Error(`Bypass fallito per ${provider}`);
             }
+            
+            if (newSession.response) {
+                requestCache.set(cacheKey, { data: newSession.response, timestamp: Date.now() });
+                return newSession.response;
+            }
+
+            let finalUrl = currentUrl;
+            if (newSession.url) {
+                try {
+                    const oldUrlObj = new URL(url);
+                    const newUrlObj = new URL(newSession.url);
+                    if (oldUrlObj.hostname !== newUrlObj.hostname) {
+                        oldUrlObj.hostname = newUrlObj.hostname;
+                        oldUrlObj.protocol = newUrlObj.protocol;
+                        finalUrl = oldUrlObj.toString();
+                    }
+                } catch (e) {}
+            }
+
+            const res = await doRequest(newSession, finalUrl);
+            requestCache.set(cacheKey, { data: res.data, timestamp: Date.now() });
+            return res.data;
         }
         throw err;
     }
