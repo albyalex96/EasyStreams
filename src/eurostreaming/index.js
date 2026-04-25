@@ -731,14 +731,14 @@ async function getStreams(id, type, season, episode, providerContext = null) {
                 }
             }));
 
-            streams = resolvedLinks.map(l => ({
+            streams = resolvedLinks.map(l => formatStream({
                 url: l.url,
                 host: l.host,
                 name: `EuroStreaming - ${l.host}`,
                 title: displayName,
                 originalTitle: displayName,
                 providerName: 'EuroStreaming'
-            }));
+            }, 'EuroStreaming')).filter(Boolean);
         } else {
             const uniqueLinks = Array.from(new Map(links.map(link => [`${link.host}:${link.url}`, link])).values());
             const nested = await Promise.all(uniqueLinks.slice(0, 5).map(link => extractStreamFromHost(link, displayName)));
