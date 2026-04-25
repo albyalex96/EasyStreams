@@ -124,18 +124,25 @@ async function smartFetch(url, domain, options = {}) {
         return res.data;
     } catch (err) {
         if (err.response && (err.response.status === 403 || err.response.status === 503)) {
-            console.warn(`[CF-HANDLER][${provider}] Blocco rilevato. Avvio bypass per ${url}...`);
+            console.warn(`[CF-HANDLER][${provider}] Blocco rilevato o sessione scaduta. Avvio bypass per ${url}...`);
             
+            // Cancella la sessione vecchia se esiste, perché evidentemente non funziona più
+            if (fs.existsSync(sessionFile)) {
+                try { fs.unlinkSync(sessionFile); } catch (e) {}
+            }
+
             const newSession = await getClearance(url, provider, options);
+            if (!newSession || !newSession.cookies) {
+                throw new Error(`Bypass fallito per ${provider}: FlareSolverr non ha restituito cookie validi.`);
+            }
             
-            // Se FlareSolverr ha seguito un redirect, aggiorniamo l'URL finale
             let finalUrl = currentUrl;
             if (newSession.url) {
                 try {
                     const oldUrlObj = new URL(url);
                     const newUrlObj = new URL(newSession.url);
                     if (oldUrlObj.hostname !== newUrlObj.hostname) {
-                        console.log(`[CF-HANDLER][${provider}] Redirect rilevato: ${oldUrlObj.hostname} -> ${newUrlObj.hostname}`);
+                        console.log(`[CF-HANDLER][${provider}] Redirect rilevato durante bypass: ${oldUrlObj.hostname} -> ${newUrlObj.hostname}`);
                         oldUrlObj.hostname = newUrlObj.hostname;
                         oldUrlObj.protocol = newUrlObj.protocol;
                         finalUrl = oldUrlObj.toString();
@@ -144,6 +151,9 @@ async function smartFetch(url, domain, options = {}) {
             }
 
             const res = await doRequest(newSession, finalUrl);
+            if (res.status === 403 || res.status === 503) {
+                throw new Error(`Bypass inefficace per ${provider}: il sito continua a restituire ${res.status}`);
+            }
             requestCache.set(cacheKey, { data: res.data, timestamp: Date.now() });
             return res.data;
         }

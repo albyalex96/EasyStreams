@@ -574,22 +574,6 @@ async function extractStreamFromHost(link, displayName) {
     }
 }
 
-async function resolveShortlink(url) {
-    if (!/clicka\.cc|uprot\.net/i.test(url)) return url;
-    try {
-        const response = await fetch(url, {
-            redirect: 'follow',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Referer': `${BASE_URL}/`
-            }
-        });
-        return response && response.url ? response.url : url;
-    } catch {
-        return url;
-    }
-}
-
 async function getStreams(id, type, season, episode, providerContext = null) {
     const benchStart = Date.now();
     const bench = [];
