@@ -8455,37 +8455,6 @@ function normalizeHostUrl(url) {
   if (!url) return null;
   return decodeEntitiesBasic(String(url)).trim();
 }
-function normalizeEasyProxyUrl(value) {
-  const trimmed = String(value || "").trim().replace(/\/+$/, "");
-  return /^https?:\/\//i.test(trimmed) ? trimmed : "";
-}
-function buildEasyProxyExtractorUrl(proxyUrl, proxyPassword, host, url) {
-  const proxyBaseUrl = normalizeEasyProxyUrl(proxyUrl);
-  const normalizedHost = String(host || "").trim().toLowerCase();
-  let normalizedUrl = String(url || "").trim();
-  if (!proxyBaseUrl || !normalizedHost || !normalizedUrl) return null;
-  const passwordQuery = proxyPassword ? `&api_password=${encodeURIComponent(String(proxyPassword))}` : "";
-  return `${proxyBaseUrl}/extractor/video.m3u8?host=${encodeURIComponent(normalizedHost)}&d=${encodeURIComponent(normalizedUrl)}&redirect_stream=true${passwordQuery}`;
-}
-function makeEasyProxyStream(link, displayName, providerContext) {
-  const sourceUrl = normalizeHostUrl(link && link.url);
-  const host = link && link.host || detectHost(sourceUrl);
-  const proxyUrl = providerContext && providerContext.proxyUrl;
-  const proxyPassword = providerContext && providerContext.proxyPassword || "";
-  const proxiedUrl = buildEasyProxyExtractorUrl(proxyUrl, proxyPassword, host, sourceUrl);
-  if (!sourceUrl || !host || !proxiedUrl) return null;
-  return formatStream({
-    url: proxiedUrl,
-    easyProxySourceUrl: sourceUrl,
-    name: `EuroStreaming - ${host}`,
-    title: displayName,
-    quality: "720p",
-    type: "direct",
-    behaviorHints: {
-      notWebReady: true
-    }
-  }, "EuroStreaming");
-}
 function resolveShortlink(url) {
   return __async(this, null, function* () {
     var _a;
@@ -8653,9 +8622,18 @@ function getStreams(id, type, season, episode, providerContext = null) {
         return { links: resolvedLinks };
       }
       const isStremioAddon = providerContext && providerContext.__requestContext === true;
-      const hasProxy = providerContext && providerContext.proxyUrl;
-      if (isStremioAddon || hasProxy) {
-        streams = links.map((link) => makeEasyProxyStream(link, displayName, providerContext)).filter(Boolean);
+      if (isStremioAddon) {
+        const resolvedLinks = yield Promise.all(links.map((l) => __async(null, null, function* () {
+          return {
+            host: l.host,
+            url: yield resolveShortlink(l.url)
+          };
+        })));
+        streams = resolvedLinks.map((l) => ({
+          url: l.url,
+          host: l.host,
+          name: displayName
+        }));
       } else {
         const uniqueLinks = Array.from(new Map(links.map((link) => [`${link.host}:${link.url}`, link])).values());
         const nested = yield Promise.all(uniqueLinks.slice(0, 5).map((link) => extractStreamFromHost(link, displayName)));
