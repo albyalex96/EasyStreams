@@ -433,10 +433,18 @@ function buildEasyProxyExtractorUrl(easyProxyUrl, easyProxyPassword, host, strea
 }
 
 function isMixdropStreamUrl(streamUrl) {
-    const normalizedStreamUrl = String(streamUrl || '').trim().toLowerCase();
-    return normalizedStreamUrl.includes('mixdrop')
-        || normalizedStreamUrl.includes('m1xdrop')
-        || normalizedStreamUrl.includes('mxcontent');
+    const lower = String(streamUrl || '').toLowerCase();
+    return lower.includes('mixdrop') || lower.includes('m1xdrop') || lower.includes('mxcontent') || lower.includes('clicka.cc/mix');
+}
+
+function isMaxstreamStreamUrl(streamUrl) {
+    const lower = String(streamUrl || '').toLowerCase();
+    return lower.includes('maxstream') || lower.includes('uprot.net') || lower.includes('stayonline.pro');
+}
+
+function isDeltabitStreamUrl(streamUrl) {
+    const lower = String(streamUrl || '').toLowerCase();
+    return lower.includes('deltabit') || lower.includes('clicka.cc/delta');
 }
 
 function isStreamHgStream(stream) {
@@ -1538,12 +1546,28 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                                 s.easyProxySourceUrl || s.url
                             );
                             proxiedByEasyProxy = finalStreamUrl !== s.url;
+                        } else if (isMaxstreamStreamUrl(s.url)) {
+                            finalStreamUrl = buildEasyProxyExtractorUrl(
+                                easyProxyUrl,
+                                easyProxyPassword,
+                                'maxstream',
+                                s.easyProxySourceUrl || s.url
+                            );
+                            proxiedByEasyProxy = finalStreamUrl !== s.url;
+                        } else if (isDeltabitStreamUrl(s.url)) {
+                            finalStreamUrl = buildEasyProxyExtractorUrl(
+                                easyProxyUrl,
+                                easyProxyPassword,
+                                'deltabit',
+                                s.easyProxySourceUrl || s.url
+                            );
+                            proxiedByEasyProxy = finalStreamUrl !== s.url;
                         }
 
                         // For Stremio, we reconstruct the legacy multiline format using metadata
                         const nameUI = (s.qualityTag && s.qualityTag !== 'Unknown') ? s.qualityTag : s.providerName;
-
-                        let titleUI = `📁 ${s.originalTitle}\n${s.providerName}`;
+                        const displayTitle = s.originalTitle || s.title || 'Stream';
+                        let titleUI = `📁 ${displayTitle}\n${s.providerName || 'EasyStreams'}`;
                         if (s.description) titleUI += ` | ${s.description}`;
                         if (s.language) {
                             titleUI += `\n🗣️ ${s.language}  🔍EasyStreams`;

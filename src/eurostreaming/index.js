@@ -735,7 +735,9 @@ async function getStreams(id, type, season, episode, providerContext = null) {
             streams = resolvedLinks.map(l => ({
                 url: l.url,
                 host: l.host,
-                name: displayName
+                name: displayName,
+                title: displayName,
+                originalTitle: displayName
             }));
         } else {
             const uniqueLinks = Array.from(new Map(links.map(link => [`${link.host}:${link.url}`, link])).values());
