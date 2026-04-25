@@ -718,19 +718,18 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         const isStremioAddon = providerContext && providerContext.__requestContext === true;
 
         if (isStremioAddon) {
-            // Risolviamo i link brevi in sequenza per non intasare FlareSolverr
-            const resolvedLinks = [];
-            for (const l of links) {
+            // Risolviamo i link brevi in parallelo (il lock in cf_handler gestirà le code)
+            const resolvedLinks = await Promise.all(links.slice(0, 5).map(async (l) => {
                 try {
-                    resolvedLinks.push({
+                    return {
                         host: l.host,
                         url: await resolveShortlink(l.url)
-                    });
+                    };
                 } catch (e) {
                     console.error(`[EuroStreaming] Fallita risoluzione per ${l.url}:`, e.message);
-                    resolvedLinks.push({ host: l.host, url: l.url });
+                    return { host: l.host, url: l.url };
                 }
-            }
+            }));
 
             streams = resolvedLinks.map(l => ({
                 url: l.url,
