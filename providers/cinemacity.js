@@ -301,18 +301,29 @@ var require_cf_bypass = __commonJS({
           return activeBypasses.get(provider);
         }
         const bypassPromise = (() => __async(null, null, function* () {
-          var _b;
+          var _a, _b;
           const FLARE_URL = process.env.FLARE_URL || "http://127.0.0.1:8191/v1";
-          console.log(`[CF] Richiesta bypass a FlareSolverr: ${url}`);
+          console.log(`[CF] Richiesta bypass a FlareSolverr [Session: ${provider}]: ${url}`);
+          function ensureSession() {
+            return __async(this, null, function* () {
+              try {
+                const sessionsResp = yield axios.post(FLARE_URL, { cmd: "sessions.list" }, { timeout: 5e3 });
+                if (sessionsResp.data && sessionsResp.data.sessions && !sessionsResp.data.sessions.includes(provider)) {
+                  yield axios.post(FLARE_URL, { cmd: "sessions.create", session: provider }, { timeout: 1e4 });
+                  console.log(`[CF] Creata nuova sessione FlareSolverr: ${provider}`);
+                }
+              } catch (e) {
+                console.warn(`[CF] Errore verifica sessioni FlareSolverr: ${e.message}`);
+              }
+            });
+          }
+          yield ensureSession();
           const payload = {
             cmd: options.method === "POST" ? "request.post" : "request.get",
             url,
+            session: provider,
             maxTimeout: 6e4
           };
-          if (options.headers) {
-            const _a = options.headers, { host, Host, cookie, Cookie } = _a, cleanHeaders = __objRest(_a, ["host", "Host", "cookie", "Cookie"]);
-            payload.headers = cleanHeaders;
-          }
           if (options.method === "POST" && options.body) {
             payload.postData = options.body;
           }
@@ -323,20 +334,43 @@ var require_cf_bypass = __commonJS({
             });
             if (response.data && response.data.status === "ok") {
               const solution = response.data.solution;
-              if (!solution.cookies || solution.cookies.length === 0) {
-                throw new Error("FlareSolverr ha restituito successo ma zero cookie.");
+              const cookiesCount = (solution.cookies || []).length;
+              const cookies = (solution.cookies || []).map((c) => `${c.name}=${c.value}`).join("; ");
+              const cf_clearance = (_a = (solution.cookies || []).find((c) => c.name === "cf_clearance")) == null ? void 0 : _a.value;
+              console.log(`[CF] FlareSolverr ha restituito ${cookiesCount} cookie.`);
+              if (!cookies && !solution.response) {
+                throw new Error("FlareSolverr ha restituito successo ma zero cookie e nessuna risposta.");
               }
-              const cookies = solution.cookies.map((c) => `${c.name}=${c.value}`).join("; ");
-              const cf_clearance = (_b = solution.cookies.find((c) => c.name === "cf_clearance")) == null ? void 0 : _b.value;
               const data = {
                 userAgent: solution.userAgent,
-                cookies,
+                cookies: cookies || "",
                 cf_clearance: cf_clearance || null,
                 url: solution.url,
                 response: solution.response,
                 timestamp: Date.now()
               };
               fs.writeFileSync(sessionFile, JSON.stringify(data, null, 2));
+              if (solution.cookies && solution.cookies.length > 0) {
+                const domains = [...new Set(solution.cookies.map((c) => c.domain.replace(/^\./, "")))];
+                for (const d of domains) {
+                  const domainProvider = d.replace("www.", "").split(".")[0];
+                  if (domainProvider && domainProvider !== provider) {
+                    const domainSessionFile = path.join(process.cwd(), `cf-session-${domainProvider}.json`);
+                    const domainCookies = solution.cookies.filter((c) => c.domain.includes(d)).map((c) => `${c.name}=${c.value}`).join("; ");
+                    if (domainCookies) {
+                      const domainData = {
+                        userAgent: solution.userAgent,
+                        cookies: domainCookies,
+                        cf_clearance: ((_b = solution.cookies.find((c) => c.domain.includes(d) && c.name === "cf_clearance")) == null ? void 0 : _b.value) || null,
+                        url: solution.url,
+                        timestamp: Date.now()
+                      };
+                      fs.writeFileSync(domainSessionFile, JSON.stringify(domainData, null, 2));
+                      console.log(`[CF] Salvata sessione extra per dominio: ${d} -> ${domainProvider}`);
+                    }
+                  }
+                }
+              }
               console.log(`[CF] FlareSolverr: Bypass completato con successo per ${url}`);
               if (solution.url && solution.url !== url) {
                 console.log(`[CF] Rilevato redirect: ${url} -> ${solution.url}`);
@@ -386,7 +420,16 @@ var require_cf_handler = __commonJS({
     var CACHE_TTL = 6e5;
     function smartFetch(_0, _1) {
       return __async(this, arguments, function* (url, domain, options = {}) {
-        const provider = options.provider || domain.replace(/https?:\/\//, "").split(".")[0];
+        const getHost = (u) => {
+          try {
+            return new URL(u).hostname.replace("www.", "");
+          } catch (e) {
+            return u;
+          }
+        };
+        const urlHost = getHost(url);
+        const domainHost = getHost(domain);
+        const provider = urlHost !== domainHost ? urlHost.split(".")[0] : options.provider || domainHost.split(".")[0];
         const sessionFile = path.join(process.cwd(), `cf-session-${provider}.json`);
         const cacheKey = `${options.method || "GET"}:${url}:${options.body || ""}`;
         if (requestCache.has(cacheKey)) {
@@ -489,7 +532,7 @@ var require_cf_handler = __commonJS({
               }
             }
             const newSession = yield getClearance(url, provider, options);
-            if (!newSession || !newSession.cookies) {
+            if (!newSession) {
               throw new Error(`Bypass fallito per ${provider}`);
             }
             if (newSession.response) {

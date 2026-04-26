@@ -27,7 +27,16 @@ const CACHE_TTL = 600000; // 10 minutes
  * Executes fetch with automatic Cloudflare handling
  */
 async function smartFetch(url, domain, options = {}) {
-    const provider = options.provider || domain.replace(/https?:\/\//, '').split('.')[0];
+    const getHost = (u) => {
+        try { return new URL(u).hostname.replace('www.', ''); } catch (e) { return u; }
+    };
+    const urlHost = getHost(url);
+    const domainHost = getHost(domain);
+    
+    // Se l'URL è su un dominio diverso dal dominio base del provider, usiamo il dominio dell'URL come provider
+    // Questo permette di avere sessioni e lock separati per i vari host (es. clicka.cc, uprot.net)
+    const provider = (urlHost !== domainHost) ? urlHost.split('.')[0] : (options.provider || domainHost.split('.')[0]);
+    
     const sessionFile = path.join(process.cwd(), `cf-session-${provider}.json`);
     const cacheKey = `${options.method || 'GET'}:${url}:${options.body || ''}`;
 
@@ -147,15 +156,17 @@ async function smartFetch(url, domain, options = {}) {
             }
 
             const newSession = await getClearance(url, provider, options);
-            if (!newSession || !newSession.cookies) {
+            if (!newSession) {
                 throw new Error(`Bypass fallito per ${provider}`);
             }
             
+            // Se FlareSolverr ha già restituito il contenuto della pagina, usiamolo
             if (newSession.response) {
                 requestCache.set(cacheKey, { data: newSession.response, timestamp: Date.now() });
                 return newSession.response;
             }
 
+            // Altrimenti procediamo con una nuova richiesta usando i cookie (se presenti)
             let finalUrl = currentUrl;
             if (newSession.url) {
                 try {

@@ -300,18 +300,29 @@ var require_cf_bypass = __commonJS({
           return activeBypasses.get(provider);
         }
         const bypassPromise = (() => __async(null, null, function* () {
-          var _b;
+          var _a, _b;
           const FLARE_URL = process.env.FLARE_URL || "http://127.0.0.1:8191/v1";
-          console.log(`[CF] Richiesta bypass a FlareSolverr: ${url}`);
+          console.log(`[CF] Richiesta bypass a FlareSolverr [Session: ${provider}]: ${url}`);
+          function ensureSession() {
+            return __async(this, null, function* () {
+              try {
+                const sessionsResp = yield axios.post(FLARE_URL, { cmd: "sessions.list" }, { timeout: 5e3 });
+                if (sessionsResp.data && sessionsResp.data.sessions && !sessionsResp.data.sessions.includes(provider)) {
+                  yield axios.post(FLARE_URL, { cmd: "sessions.create", session: provider }, { timeout: 1e4 });
+                  console.log(`[CF] Creata nuova sessione FlareSolverr: ${provider}`);
+                }
+              } catch (e) {
+                console.warn(`[CF] Errore verifica sessioni FlareSolverr: ${e.message}`);
+              }
+            });
+          }
+          yield ensureSession();
           const payload = {
             cmd: options.method === "POST" ? "request.post" : "request.get",
             url,
+            session: provider,
             maxTimeout: 6e4
           };
-          if (options.headers) {
-            const _a = options.headers, { host, Host, cookie, Cookie } = _a, cleanHeaders = __objRest(_a, ["host", "Host", "cookie", "Cookie"]);
-            payload.headers = cleanHeaders;
-          }
           if (options.method === "POST" && options.body) {
             payload.postData = options.body;
           }
@@ -322,20 +333,43 @@ var require_cf_bypass = __commonJS({
             });
             if (response.data && response.data.status === "ok") {
               const solution = response.data.solution;
-              if (!solution.cookies || solution.cookies.length === 0) {
-                throw new Error("FlareSolverr ha restituito successo ma zero cookie.");
+              const cookiesCount = (solution.cookies || []).length;
+              const cookies = (solution.cookies || []).map((c) => `${c.name}=${c.value}`).join("; ");
+              const cf_clearance = (_a = (solution.cookies || []).find((c) => c.name === "cf_clearance")) == null ? void 0 : _a.value;
+              console.log(`[CF] FlareSolverr ha restituito ${cookiesCount} cookie.`);
+              if (!cookies && !solution.response) {
+                throw new Error("FlareSolverr ha restituito successo ma zero cookie e nessuna risposta.");
               }
-              const cookies = solution.cookies.map((c) => `${c.name}=${c.value}`).join("; ");
-              const cf_clearance = (_b = solution.cookies.find((c) => c.name === "cf_clearance")) == null ? void 0 : _b.value;
               const data = {
                 userAgent: solution.userAgent,
-                cookies,
+                cookies: cookies || "",
                 cf_clearance: cf_clearance || null,
                 url: solution.url,
                 response: solution.response,
                 timestamp: Date.now()
               };
               fs.writeFileSync(sessionFile, JSON.stringify(data, null, 2));
+              if (solution.cookies && solution.cookies.length > 0) {
+                const domains = [...new Set(solution.cookies.map((c) => c.domain.replace(/^\./, "")))];
+                for (const d of domains) {
+                  const domainProvider = d.replace("www.", "").split(".")[0];
+                  if (domainProvider && domainProvider !== provider) {
+                    const domainSessionFile = path.join(process.cwd(), `cf-session-${domainProvider}.json`);
+                    const domainCookies = solution.cookies.filter((c) => c.domain.includes(d)).map((c) => `${c.name}=${c.value}`).join("; ");
+                    if (domainCookies) {
+                      const domainData = {
+                        userAgent: solution.userAgent,
+                        cookies: domainCookies,
+                        cf_clearance: ((_b = solution.cookies.find((c) => c.domain.includes(d) && c.name === "cf_clearance")) == null ? void 0 : _b.value) || null,
+                        url: solution.url,
+                        timestamp: Date.now()
+                      };
+                      fs.writeFileSync(domainSessionFile, JSON.stringify(domainData, null, 2));
+                      console.log(`[CF] Salvata sessione extra per dominio: ${d} -> ${domainProvider}`);
+                    }
+                  }
+                }
+              }
               console.log(`[CF] FlareSolverr: Bypass completato con successo per ${url}`);
               if (solution.url && solution.url !== url) {
                 console.log(`[CF] Rilevato redirect: ${url} -> ${solution.url}`);
@@ -385,7 +419,16 @@ var require_cf_handler = __commonJS({
     var CACHE_TTL = 6e5;
     function smartFetch2(_0, _1) {
       return __async(this, arguments, function* (url, domain, options = {}) {
-        const provider = options.provider || domain.replace(/https?:\/\//, "").split(".")[0];
+        const getHost = (u) => {
+          try {
+            return new URL(u).hostname.replace("www.", "");
+          } catch (e) {
+            return u;
+          }
+        };
+        const urlHost = getHost(url);
+        const domainHost = getHost(domain);
+        const provider = urlHost !== domainHost ? urlHost.split(".")[0] : options.provider || domainHost.split(".")[0];
         const sessionFile = path.join(process.cwd(), `cf-session-${provider}.json`);
         const cacheKey = `${options.method || "GET"}:${url}:${options.body || ""}`;
         if (requestCache.has(cacheKey)) {
@@ -488,7 +531,7 @@ var require_cf_handler = __commonJS({
               }
             }
             const newSession = yield getClearance(url, provider, options);
-            if (!newSession || !newSession.cookies) {
+            if (!newSession) {
               throw new Error(`Bypass fallito per ${provider}`);
             }
             if (newSession.response) {
@@ -7796,28 +7839,76 @@ var require_maxstream = __commonJS({
   }
 });
 
+// src/utils/ocr.js
+var require_ocr = __commonJS({
+  "src/utils/ocr.js"(exports2, module2) {
+    function solveNumericCaptcha2(imgBase64) {
+      return __async(this, null, function* () {
+        const { spawn } = require("child_process");
+        return new Promise((resolve, reject) => {
+          try {
+            const cleanBase64 = imgBase64.includes(",") ? imgBase64.split(",")[1] : imgBase64;
+            const python = spawn("python", ["ocr_helper.py"]);
+            let result = "";
+            let error = "";
+            python.stdin.write(cleanBase64);
+            python.stdin.end();
+            python.stdout.on("data", (data) => {
+              result += data.toString();
+            });
+            python.stderr.on("data", (data) => {
+              error += data.toString();
+            });
+            python.on("close", (code) => {
+              if (code !== 0) {
+                console.error("[OCR] Errore processo Python:", error);
+                return reject(new Error("OCR engine error"));
+              }
+              const solved = result.trim();
+              resolve(solved);
+            });
+            python.on("error", (err) => {
+              console.error("[OCR] Errore avvio Python:", err.message);
+              reject(err);
+            });
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+    }
+    module2.exports = { solveNumericCaptcha: solveNumericCaptcha2 };
+  }
+});
+
 // src/extractors/deltabit.js
 var require_deltabit = __commonJS({
   "src/extractors/deltabit.js"(exports2, module2) {
     var { USER_AGENT } = require_common();
     var { smartFetch: smartFetch2 } = require_cf_handler();
+    var { solveNumericCaptcha: solveNumericCaptcha2 } = require_ocr();
     function extractDeltaBit2(url, refererBase = "https://eurostreamings.help/") {
       return __async(this, null, function* () {
         try {
           let targetUrl = url;
           if (targetUrl.startsWith("//")) targetUrl = "https:" + targetUrl;
-          if (targetUrl.includes("safego.cc") || targetUrl.includes("clicka.cc") || targetUrl.includes("clicka.cc/delta")) {
+          let redirectLoopCount = 0;
+          while (redirectLoopCount < 3 && (targetUrl.includes("safego.cc") || targetUrl.includes("clicka.cc"))) {
+            redirectLoopCount++;
             const html2 = yield smartFetch2(targetUrl, "clicka", {
               headers: { "User-Agent": USER_AGENT, "Referer": refererBase }
             });
-            if (!html2) return null;
-            const deltabitMatch = html2.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9]+/);
-            if (deltabitMatch) {
-              targetUrl = deltabitMatch[0];
+            if (!html2) break;
+            const nextMatch = html2.match(/https?:\/\/(?:deltabit|safego|clicka)\.[a-z]+\/[a-zA-Z0-9?=_&%-]+/i);
+            if (nextMatch) {
+              targetUrl = nextMatch[0].replace(/&amp;/g, "&");
+              if (targetUrl.includes("deltabit.")) break;
             } else {
-              const refreshMatch = html2.match(/url=(https?:\/\/deltabit\.[^"']+)/i);
+              const refreshMatch = html2.match(/url=(https?:\/\/[^"']+)/i);
               if (refreshMatch) {
-                targetUrl = refreshMatch[1];
+                targetUrl = refreshMatch[1].replace(/&amp;/g, "&");
+              } else {
+                break;
               }
             }
           }
@@ -7869,20 +7960,14 @@ var require_deltabit = __commonJS({
                   headers: { "Referer": targetUrl },
                   responseType: "arraybuffer"
                 });
-                const base64 = Buffer.from(imgData).toString("base64");
-                const ocrApiUrl = "https://easystreams.realbestia.com/ocr";
-                const ocrResp = yield fetch(ocrApiUrl, {
-                  method: "POST",
-                  body: base64,
-                  headers: { "Content-Type": "text/plain" }
-                });
-                const ocrData = yield ocrResp.json();
-                if (ocrData.result) {
-                  console.log(`[DeltaBit] Captcha solved via server: ${ocrData.result}`);
-                  formData.set("code", ocrData.result);
+                const base64 = Buffer.isBuffer(imgData) ? imgData.toString("base64") : Buffer.from(imgData).toString("base64");
+                const captchaCode = yield solveNumericCaptcha2(base64);
+                if (captchaCode) {
+                  console.log(`[DeltaBit] Captcha risolto (locale): ${captchaCode}`);
+                  formData.set("code", captchaCode);
                 }
               } catch (ocrErr) {
-                console.error("[DeltaBit] OCR Integration failed:", ocrErr.message);
+                console.error("[DeltaBit] Errore OCR locale:", ocrErr.message);
               }
             }
             yield new Promise((resolve) => setTimeout(resolve, 3500));
@@ -7950,48 +8035,6 @@ var require_extractors = __commonJS({
       USER_AGENT,
       unPack
     };
-  }
-});
-
-// src/utils/ocr.js
-var require_ocr = __commonJS({
-  "src/utils/ocr.js"(exports2, module2) {
-    function solveNumericCaptcha2(imgBase64) {
-      return __async(this, null, function* () {
-        const { spawn } = require("child_process");
-        return new Promise((resolve, reject) => {
-          try {
-            const cleanBase64 = imgBase64.includes(",") ? imgBase64.split(",")[1] : imgBase64;
-            const python = spawn("python", ["ocr_helper.py"]);
-            let result = "";
-            let error = "";
-            python.stdin.write(cleanBase64);
-            python.stdin.end();
-            python.stdout.on("data", (data) => {
-              result += data.toString();
-            });
-            python.stderr.on("data", (data) => {
-              error += data.toString();
-            });
-            python.on("close", (code) => {
-              if (code !== 0) {
-                console.error("[OCR] Errore processo Python:", error);
-                return reject(new Error("OCR engine error"));
-              }
-              const solved = result.trim();
-              resolve(solved);
-            });
-            python.on("error", (err) => {
-              console.error("[OCR] Errore avvio Python:", err.message);
-              reject(err);
-            });
-          } catch (e) {
-            reject(e);
-          }
-        });
-      });
-    }
-    module2.exports = { solveNumericCaptcha: solveNumericCaptcha2 };
   }
 });
 
@@ -8444,22 +8487,24 @@ function resolveShortlink(url) {
     if (url.includes("uprot.net/msf/")) {
       url = url.replace("/msf/", "/mse/");
     }
-    if (url.includes("uprot.net") || url.includes("clicka.cc") || url.includes("safego.cc")) {
+    let currentUrl = url;
+    let hops = 0;
+    while (hops < 3 && (currentUrl.includes("uprot.net") || currentUrl.includes("clicka.cc") || currentUrl.includes("safego.cc"))) {
+      hops++;
       try {
-        const html = yield fetchHtml(url);
+        const html = yield fetchHtml(currentUrl);
         const captchaMatch = html.match(/<img[^>]+src=["']([^"']*(?:captcha|secure)[^"']*)["']/i);
         const formMatch = html.match(/<form[^>]*method=["']POST["'][^>]*>([\s\S]*?)<\/form>/i);
         if (captchaMatch && formMatch) {
-          console.log(`[EuroStreaming] Captcha numerico rilevato per ${url}. Risoluzione in corso...`);
+          console.log(`[EuroStreaming] Captcha numerico rilevato per ${currentUrl}. Risoluzione in corso...`);
           let captchaUrl = captchaMatch[1];
           if (captchaUrl.startsWith("/")) {
-            const urlObj = new URL(url);
+            const urlObj = new URL(currentUrl);
             captchaUrl = `${urlObj.protocol}//${urlObj.host}${captchaUrl}`;
           }
           const imgData = yield smartFetch(captchaUrl, BASE_URL, {
             provider: PROVIDER,
             responseType: "arraybuffer"
-            // Dobbiamo assicurarci che smartFetch supporti o passi axios config
           });
           const base64 = Buffer.isBuffer(imgData) ? imgData.toString("base64") : Buffer.from(imgData).toString("base64");
           const captchaCode = yield solveNumericCaptcha(base64);
@@ -8474,34 +8519,47 @@ function resolveShortlink(url) {
             const captchaFieldName = ((_a = formMatch[1].match(/name=["']([^"']*(?:captcha|code|response)[^"']*)["']/i)) == null ? void 0 : _a[1]) || "captcha";
             inputs[captchaFieldName] = captchaCode;
             const postBody = new URLSearchParams(inputs).toString();
-            const postHtml = yield smartFetch(url, BASE_URL, {
+            const postHtml = yield smartFetch(currentUrl, BASE_URL, {
               method: "POST",
               provider: PROVIDER,
               headers: {
                 "Content-Type": "application/x-www-form-urlencoded",
-                "Referer": url
+                "Referer": currentUrl
               },
               body: postBody
             });
-            const finalMatch = postHtml.match(/https?:\/\/(?:deltabit|maxstream|stayonline|uprot|mixdrop|m1xdrop)\.[a-z]+\/(?:msf|mse|v|e|embed|embed-[a-z0-9]+|mix|delta)\/[a-zA-Z0-9\/=_+-]+/i);
-            if (finalMatch) return finalMatch[0];
+            const finalMatch = postHtml.match(/https?:\/\/(?:deltabit|maxstream|stayonline|uprot|mixdrop|m1xdrop|safego|clicka)\.[a-z]+\/(?:msf|mse|v|e|embed|embed-[a-z0-9]+|mix|delta|safe\.php)\/[a-zA-Z0-9\/=_+-]+/i);
+            if (finalMatch) {
+              currentUrl = finalMatch[0];
+              if (!currentUrl.includes("safego") && !currentUrl.includes("clicka")) break;
+              continue;
+            }
           }
         }
-        const linkMatch = html.match(new RegExp(`href=["'](https?:\\/\\/(?:maxstream|stayonline|uprot|deltabit|mixdrop|m1xdrop)\\.[a-z]+\\/(?:msf|mse|v|e|embed|mix|delta)\\/[^"']+(?<!\\.ico|\\.png|\\.jpg|\\.jpeg|\\.gif))["']`, "i"));
-        if (linkMatch) return linkMatch[1];
+        const linkMatch = html.match(new RegExp(`href=["'](https?:\\/\\/(?:maxstream|stayonline|uprot|deltabit|mixdrop|m1xdrop|safego|clicka)\\.[a-z]+\\/(?:msf|mse|v|e|embed|mix|delta|safe\\.php)\\/[^"']+(?<!\\.ico|\\.png|\\.jpg|\\.jpeg|\\.gif))["']`, "i"));
+        if (linkMatch) {
+          currentUrl = linkMatch[1];
+          if (!currentUrl.includes("safego") && !currentUrl.includes("clicka")) break;
+          continue;
+        }
         const deltabitMatch = html.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9\/=_+-]+/i);
-        if (deltabitMatch) return deltabitMatch[0];
-        const maxMatch = html.match(/https?:\/\/(?:maxstream|stayonline|uprot)\.[a-z]+\/(?:msf|mse|v)\/[a-zA-Z0-9\/=_+-]+/i);
-        if (maxMatch) return maxMatch[0];
-        const mixMatch = html.match(/https?:\/\/(?:mixdrop|m1xdrop)\.[a-z]+\/(?:mix|e)\/[a-zA-Z0-9\/=_+-]+/i);
-        if (mixMatch) return mixMatch[0];
-        const refreshMatch = html.match(new RegExp(`url=(https?:\\/\\/(?:deltabit|maxstream|stayonline|uprot|mixdrop|m1xdrop)\\.[^"']+(?<!\\.ico|\\.png|\\.jpg))`, "i"));
-        if (refreshMatch) return refreshMatch[1];
+        if (deltabitMatch) {
+          currentUrl = deltabitMatch[0];
+          break;
+        }
+        const refreshMatch = html.match(new RegExp(`url=(https?:\\/\\/(?:deltabit|maxstream|stayonline|uprot|mixdrop|m1xdrop|safego|clicka)\\.[^"']+(?<!\\.ico|\\.png|\\.jpg))`, "i"));
+        if (refreshMatch) {
+          currentUrl = refreshMatch[1];
+          if (!currentUrl.includes("safego") && !currentUrl.includes("clicka")) break;
+          continue;
+        }
+        break;
       } catch (e) {
-        console.error(`[EuroStreaming] Errore risoluzione shortlink ${url}:`, e.message);
+        console.error(`[EuroStreaming] Errore risoluzione shortlink ${currentUrl}:`, e.message);
+        break;
       }
     }
-    return url;
+    return currentUrl;
   });
 }
 function extractStreamFromHost(link, displayName) {

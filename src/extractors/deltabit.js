@@ -1,27 +1,33 @@
 const { USER_AGENT } = require('./common');
 const { smartFetch } = require('../utils/cf_handler');
+const { solveNumericCaptcha } = require('../utils/ocr');
 
 async function extractDeltaBit(url, refererBase = 'https://eurostreamings.help/') {
   try {
     let targetUrl = url;
     if (targetUrl.startsWith("//")) targetUrl = "https:" + targetUrl;
 
-    // 1. Resolve redirectors (safego.cc, clicka.cc)
-    if (targetUrl.includes('safego.cc') || targetUrl.includes('clicka.cc') || targetUrl.includes('clicka.cc/delta')) {
+    // 1. Resolve redirectors (safego.cc, clicka.cc, etc.)
+    let redirectLoopCount = 0;
+    while (redirectLoopCount < 3 && (targetUrl.includes('safego.cc') || targetUrl.includes('clicka.cc'))) {
+        redirectLoopCount++;
         const html = await smartFetch(targetUrl, 'clicka', {
             headers: { "User-Agent": USER_AGENT, "Referer": refererBase }
         });
-        if (!html) return null;
+        if (!html) break;
         
-        // Simple redirector resolution - look for the final deltabit link
-        const deltabitMatch = html.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9]+/);
-        if (deltabitMatch) {
-            targetUrl = deltabitMatch[0];
+        // Look for the next link (deltabit or another redirector)
+        const nextMatch = html.match(/https?:\/\/(?:deltabit|safego|clicka)\.[a-z]+\/[a-zA-Z0-9?=_&%-]+/i);
+        if (nextMatch) {
+            targetUrl = nextMatch[0].replace(/&amp;/g, '&');
+            if (targetUrl.includes('deltabit.')) break; // Found the final destination
         } else {
             // Check for meta refresh
-            const refreshMatch = html.match(/url=(https?:\/\/deltabit\.[^"']+)/i);
+            const refreshMatch = html.match(/url=(https?:\/\/[^"']+)/i);
             if (refreshMatch) {
-                targetUrl = refreshMatch[1];
+                targetUrl = refreshMatch[1].replace(/&amp;/g, '&');
+            } else {
+                break;
             }
         }
     }
@@ -89,24 +95,21 @@ async function extractDeltaBit(url, refererBase = 'https://eurostreamings.help/'
                     headers: { "Referer": targetUrl },
                     responseType: 'arraybuffer'
                 });
-                const base64 = Buffer.from(imgData).toString('base64');
                 
-                // Call our server's OCR API
-                // We use the same server URL we used for resolve
-                const ocrApiUrl = 'https://easystreams.realbestia.com/ocr';
-                const ocrResp = await fetch(ocrApiUrl, {
-                    method: 'POST',
-                    body: base64,
-                    headers: { 'Content-Type': 'text/plain' }
-                });
-                const ocrData = await ocrResp.json();
+                // Convert buffer to base64
+                const base64 = Buffer.isBuffer(imgData) 
+                    ? imgData.toString('base64') 
+                    : Buffer.from(imgData).toString('base64');
                 
-                if (ocrData.result) {
-                    console.log(`[DeltaBit] Captcha solved via server: ${ocrData.result}`);
-                    formData.set('code', ocrData.result);
+                // Solve via local OCR engine
+                const captchaCode = await solveNumericCaptcha(base64);
+                
+                if (captchaCode) {
+                    console.log(`[DeltaBit] Captcha risolto (locale): ${captchaCode}`);
+                    formData.set('code', captchaCode);
                 }
             } catch (ocrErr) {
-                console.error("[DeltaBit] OCR Integration failed:", ocrErr.message);
+                console.error("[DeltaBit] Errore OCR locale:", ocrErr.message);
             }
         }
 

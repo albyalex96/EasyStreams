@@ -532,33 +532,35 @@ async function resolveShortlink(url) {
         url = url.replace('/msf/', '/mse/');
     }
 
-    if (url.includes('uprot.net') || url.includes('clicka.cc') || url.includes('safego.cc')) {
+    let currentUrl = url;
+    let hops = 0;
+
+    while (hops < 3 && (currentUrl.includes('uprot.net') || currentUrl.includes('clicka.cc') || currentUrl.includes('safego.cc'))) {
+        hops++;
         try {
-            const html = await fetchHtml(url);
+            const html = await fetchHtml(currentUrl);
             
             // 1. Controllo se c'è un captcha numerico (comune su clicka e uprot)
             const captchaMatch = html.match(/<img[^>]+src=["']([^"']*(?:captcha|secure)[^"']*)["']/i);
             const formMatch = html.match(/<form[^>]*method=["']POST["'][^>]*>([\s\S]*?)<\/form>/i);
             
             if (captchaMatch && formMatch) {
-                console.log(`[EuroStreaming] Captcha numerico rilevato per ${url}. Risoluzione in corso...`);
+                console.log(`[EuroStreaming] Captcha numerico rilevato per ${currentUrl}. Risoluzione in corso...`);
                 let captchaUrl = captchaMatch[1];
                 if (captchaUrl.startsWith('/')) {
-                    const urlObj = new URL(url);
+                    const urlObj = new URL(currentUrl);
                     captchaUrl = `${urlObj.protocol}//${urlObj.host}${captchaUrl}`;
                 }
 
                 // Scarichiamo l'immagine in base64 tramite smartFetch
                 const imgData = await smartFetch(captchaUrl, BASE_URL, {
                     provider: PROVIDER,
-                    responseType: 'arraybuffer' // Dobbiamo assicurarci che smartFetch supporti o passi axios config
+                    responseType: 'arraybuffer'
                 });
-                // Nota: smartFetch restituisce res.data (stringa o buffer)
                 const base64 = Buffer.isBuffer(imgData) 
                     ? imgData.toString('base64') 
                     : Buffer.from(imgData).toString('base64');
 
-                // Chiamiamo il nostro OCR locale direttamente
                 const captchaCode = await solveNumericCaptcha(base64);
 
                 if (captchaCode) {
@@ -573,40 +575,55 @@ async function resolveShortlink(url) {
                     const captchaFieldName = formMatch[1].match(/name=["']([^"']*(?:captcha|code|response)[^"']*)["']/i)?.[1] || 'captcha';
                     inputs[captchaFieldName] = captchaCode;
 
-                    // Inviamo il form tramite smartFetch (POST)
                     const postBody = new URLSearchParams(inputs).toString();
-                    const postHtml = await smartFetch(url, BASE_URL, {
+                    const postHtml = await smartFetch(currentUrl, BASE_URL, {
                         method: 'POST',
                         provider: PROVIDER,
                         headers: { 
                             'Content-Type': 'application/x-www-form-urlencoded',
-                            'Referer': url 
+                            'Referer': currentUrl 
                         },
                         body: postBody
                     });
 
-                    const finalMatch = postHtml.match(/https?:\/\/(?:deltabit|maxstream|stayonline|uprot|mixdrop|m1xdrop)\.[a-z]+\/(?:msf|mse|v|e|embed|embed-[a-z0-9]+|mix|delta)\/[a-zA-Z0-9\/=_+-]+/i);
-                    if (finalMatch) return finalMatch[0];
+                    const finalMatch = postHtml.match(/https?:\/\/(?:deltabit|maxstream|stayonline|uprot|mixdrop|m1xdrop|safego|clicka)\.[a-z]+\/(?:msf|mse|v|e|embed|embed-[a-z0-9]+|mix|delta|safe\.php)\/[a-zA-Z0-9\/=_+-]+/i);
+                    if (finalMatch) {
+                        currentUrl = finalMatch[0];
+                        if (!currentUrl.includes('safego') && !currentUrl.includes('clicka')) break; // Found final host
+                        continue;
+                    }
                 }
             }
 
             // 2. Fallback: cerca link in bottoni/ancore o redirect standard
-            const linkMatch = html.match(/href=["'](https?:\/\/(?:maxstream|stayonline|uprot|deltabit|mixdrop|m1xdrop)\.[a-z]+\/(?:msf|mse|v|e|embed|mix|delta)\/[^"']+(?<!\.ico|\.png|\.jpg|\.jpeg|\.gif))["']/i);
-            if (linkMatch) return linkMatch[1];
+            const linkMatch = html.match(/href=["'](https?:\/\/(?:maxstream|stayonline|uprot|deltabit|mixdrop|m1xdrop|safego|clicka)\.[a-z]+\/(?:msf|mse|v|e|embed|mix|delta|safe\.php)\/[^"']+(?<!\.ico|\.png|\.jpg|\.jpeg|\.gif))["']/i);
+            if (linkMatch) {
+                currentUrl = linkMatch[1];
+                if (!currentUrl.includes('safego') && !currentUrl.includes('clicka')) break;
+                continue;
+            }
 
             const deltabitMatch = html.match(/https?:\/\/deltabit\.(?:co|sx|bz|sx)\/[a-zA-Z0-9\/=_+-]+/i);
-            if (deltabitMatch) return deltabitMatch[0];
-            const maxMatch = html.match(/https?:\/\/(?:maxstream|stayonline|uprot)\.[a-z]+\/(?:msf|mse|v)\/[a-zA-Z0-9\/=_+-]+/i);
-            if (maxMatch) return maxMatch[0];
-            const mixMatch = html.match(/https?:\/\/(?:mixdrop|m1xdrop)\.[a-z]+\/(?:mix|e)\/[a-zA-Z0-9\/=_+-]+/i);
-            if (mixMatch) return mixMatch[0];
-            const refreshMatch = html.match(/url=(https?:\/\/(?:deltabit|maxstream|stayonline|uprot|mixdrop|m1xdrop)\.[^"']+(?<!\.ico|\.png|\.jpg))/i);
-            if (refreshMatch) return refreshMatch[1];
+            if (deltabitMatch) {
+                currentUrl = deltabitMatch[0];
+                break;
+            }
+            
+            const refreshMatch = html.match(/url=(https?:\/\/(?:deltabit|maxstream|stayonline|uprot|mixdrop|m1xdrop|safego|clicka)\.[^"']+(?<!\.ico|\.png|\.jpg))/i);
+            if (refreshMatch) {
+                currentUrl = refreshMatch[1];
+                if (!currentUrl.includes('safego') && !currentUrl.includes('clicka')) break;
+                continue;
+            }
+            
+            // Se non abbiamo trovato nulla di nuovo, fermiamoci
+            break;
         } catch (e) {
-            console.error(`[EuroStreaming] Errore risoluzione shortlink ${url}:`, e.message);
+            console.error(`[EuroStreaming] Errore risoluzione shortlink ${currentUrl}:`, e.message);
+            break;
         }
     }
-    return url;
+    return currentUrl;
 }
 
 async function extractStreamFromHost(link, displayName) {
