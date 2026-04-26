@@ -2205,7 +2205,7 @@ app.get('/resolve/:provider', async (req, res) => {
         if (providerContext) providerContext.format = format || "streams";
 
         const result = await provider.getStreams(id, type, season, episode, providerContext);
-        
+
         if (format === 'links') {
             res.json({ links: result.links || [] });
         } else {
@@ -2236,38 +2236,6 @@ async function warmupProviders() {
             console.error(`[Warmup] Errore riscaldamento ${target.name}:`, e.message);
         }
     }));
-
-    // Passaggio extra: Riscaldamento redirector (clicka, safego, uprot) tramite una serie reale
-    try {
-        console.log('[Warmup] Riscaldamento redirector (clicka/safego/uprot) tramite "The Boys"...');
-        const eurostreaming = require('./src/eurostreaming/index.js');
-        // Cerchiamo i link per The Boys S1E1
-        const result = await eurostreaming.getStreams('tt1190634', 'series', 1, 1, { format: 'links', __requestContext: true });
-        const links = result?.links || [];
-        
-        if (links.length > 0) {
-            // Identifichiamo tutti i domini di redirector unici presenti
-            const redirectorDomains = ['clicka.cc', 'safego.cc', 'uprot.net'];
-            const tasks = [];
-            const seenProviders = new Set();
-
-            for (const link of links) {
-                const domain = redirectorDomains.find(d => link.url.includes(d));
-                if (domain) {
-                    const provider = domain.split('.')[0];
-                    if (!seenProviders.has(provider)) {
-                        seenProviders.add(provider);
-                        console.log(`[Warmup] Risoluzione link reale per bypass redirector [${provider}]: ${link.url}`);
-                        tasks.push(getClearance(link.url, provider).catch(() => null));
-                    }
-                }
-            }
-            if (tasks.length > 0) await Promise.all(tasks);
-        }
-        console.log('[Warmup] Redirector pronti!');
-    } catch (e) {
-        console.warn('[Warmup] Avviso: riscaldamento redirector fallito (non critico):', e.message);
-    }
 
     isWarmingUp = false;
     console.log('[Warmup] Riscaldamento completato. Server pronto ad accettare richieste.');

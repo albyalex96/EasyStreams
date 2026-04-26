@@ -735,20 +735,9 @@ async function getStreams(id, type, season, episode, providerContext = null) {
         const isStremioAddon = providerContext && providerContext.__requestContext === true;
 
         if (isStremioAddon) {
-            // Risolviamo i link brevi in parallelo (il lock in cf_handler gestirà le code)
-            const resolvedLinks = await Promise.all(links.slice(0, 5).map(async (l) => {
-                try {
-                    return {
-                        host: l.host,
-                        url: await resolveShortlink(l.url)
-                    };
-                } catch (e) {
-                    console.error(`[EuroStreaming] Fallita risoluzione per ${l.url}:`, e.message);
-                    return { host: l.host, url: l.url };
-                }
-            }));
-
-            streams = resolvedLinks.map(l => formatStream({
+            // Non risolviamo più i link brevi (uprot, clicka, safego) qui.
+            // EasyProxy in stremio_addon.js si occuperà di wrapparli nell'estrattore appropriato.
+            streams = links.map(l => formatStream({
                 url: l.url,
                 host: l.host,
                 name: `EuroStreaming - ${l.host}`,

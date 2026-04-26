@@ -13391,18 +13391,7 @@ var require_eurostreaming = __commonJS({
           }
           const isStremioAddon = providerContext && providerContext.__requestContext === true;
           if (isStremioAddon) {
-            const resolvedLinks = yield Promise.all(links.slice(0, 5).map((l) => __async(null, null, function* () {
-              try {
-                return {
-                  host: l.host,
-                  url: yield resolveShortlink(l.url)
-                };
-              } catch (e) {
-                console.error(`[EuroStreaming] Fallita risoluzione per ${l.url}:`, e.message);
-                return { host: l.host, url: l.url };
-              }
-            })));
-            streams = resolvedLinks.map((l) => formatStream({
+            streams = links.map((l) => formatStream({
               url: l.url,
               host: l.host,
               name: `EuroStreaming - ${l.host}`,
