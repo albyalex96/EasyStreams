@@ -102,7 +102,7 @@ async function smartFetch(url, domain, options = {}) {
         if (sess.userAgent) {
             mergedHeaders['User-Agent'] = sess.userAgent;
         } else if (!mergedHeaders['User-Agent']) {
-            mergedHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+            mergedHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
         }
 
         // Merge session cookies with provided cookies

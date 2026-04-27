@@ -2229,15 +2229,17 @@ async function warmupProviders() {
         { name: 'EuroStreaming', url: 'https://eurostreamings.help/?s=warmup' }
     ];
 
-    await Promise.all(targets.map(async (target) => {
+    for (const target of targets) {
         try {
             console.log(`[Warmup] Riscaldamento ${target.name}...`);
             await getClearance(target.url, target.name.toLowerCase());
             console.log(`[Warmup] ${target.name} pronto!`);
+            // Piccola pausa per lasciare respirare FlareSolverr
+            await new Promise(resolve => setTimeout(resolve, 3000));
         } catch (e) {
-            console.error(`[Warmup] Errore riscaldamento ${target.name}:`, e.message);
+            console.error(`[Warmup] Errore riscaldamento ${target.name}: ${e.message}`);
         }
-    }));
+    }
 
     isWarmingUp = false;
     console.log('[Warmup] Riscaldamento completato. Server pronto ad accettare richieste.');
