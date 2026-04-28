@@ -57,6 +57,7 @@ async function smartFetch(url, domain, options = {}) {
                     const twoHours = 2 * 60 * 60 * 1000;
                     if (ageMs > twoHours) {
                         console.log(`[CF-HANDLER][${provider}] Sessione su file troppo vecchia (${Math.round(ageMs/60000)} min), forzo refresh.`);
+                        try { fs.unlinkSync(sessionFile); } catch (e) {}
                         return {};
                     }
                     console.log(`[CF-HANDLER][${provider}] Sessione caricata da file (${Math.round(ageMs/60000)} min fa).`);

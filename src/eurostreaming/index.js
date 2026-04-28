@@ -15,16 +15,16 @@ if (!IS_SERVER) {
                 const rawLinks = data.links || [];
                 console.log(`[EuroStreaming-Client] Trovati ${rawLinks.length} link dal server.`);
                 const streams = [];
-                
+
                 for (const link of rawLinks) {
                     try {
                         console.log(`[EuroStreaming-Client] Estrazione da: ${link.host} (${link.url})`);
                         let extracted = null;
                         const lower = link.url.toLowerCase();
                         if (lower.includes('maxstream') || lower.includes('uprot.net')) {
-                            extracted = await extractMaxStream(link.url, 'https://eurostreamings.help/');
+                            extracted = await extractMaxStream(link.url, 'https://eurostreamings.work/');
                         } else if (lower.includes('deltabit') || lower.includes('clicka.cc/delta')) {
-                            extracted = await extractDeltaBit(link.url, 'https://eurostreamings.help/');
+                            extracted = await extractDeltaBit(link.url, 'https://eurostreamings.work/');
                         } else if (lower.includes('mixdrop') || lower.includes('m1xdrop')) {
                             console.log(`[EuroStreaming-Client] MixDrop aggiunto direttamente.`);
                             streams.push({ name: `[EuroStreaming] MixDrop`, url: link.url, quality: 'HD' });
@@ -59,7 +59,7 @@ if (!IS_SERVER) {
     return;
 }
 
-const BASE_URL = 'https://eurostreamings.help';
+const BASE_URL = 'https://eurostreamings.work';
 const PROVIDER = 'eurostreaming';
 const TMDB_API_KEY = '68e094699525b18a70bab2f86b1fa706';
 
@@ -405,7 +405,7 @@ function scoreCandidate(candidate, html, info) {
     }
 
     if (info.year && new RegExp(`\\b${info.year}\\b`).test(text)) score += 30;
-    
+
     if (info.type === 'tv') {
         if (/serie tv|prima stagione|stagione|episodi|1\s*[x×]\s*0?1/i.test(lowText)) score += 30;
         if (/streaming film|film in streaming/i.test(lowText)) score -= 40;
@@ -526,7 +526,7 @@ function makeEuroStreamingStream(link, displayName) {
 
 async function resolveShortlink(url) {
     console.log(`[EuroStreaming] Tentativo di risoluzione link breve: ${url}`);
-    
+
     // Normalizzazione rapida per MaxStream/uprot
     if (url.includes('uprot.net/msf/')) {
         url = url.replace('/msf/', '/mse/');
@@ -539,11 +539,11 @@ async function resolveShortlink(url) {
         hops++;
         try {
             const html = await fetchHtml(currentUrl);
-            
+
             // 1. Controllo se c'è un captcha numerico (comune su clicka e uprot)
             const captchaMatch = html.match(/<img[^>]+src=["']([^"']*(?:captcha|secure)[^"']*)["']/i);
             const formMatch = html.match(/<form[^>]*method=["']POST["'][^>]*>([\s\S]*?)<\/form>/i);
-            
+
             if (captchaMatch && formMatch) {
                 console.log(`[EuroStreaming] Captcha numerico rilevato per ${currentUrl}. Risoluzione in corso...`);
                 let captchaUrl = captchaMatch[1];
@@ -557,8 +557,8 @@ async function resolveShortlink(url) {
                     provider: PROVIDER,
                     responseType: 'arraybuffer'
                 });
-                const base64 = Buffer.isBuffer(imgData) 
-                    ? imgData.toString('base64') 
+                const base64 = Buffer.isBuffer(imgData)
+                    ? imgData.toString('base64')
                     : Buffer.from(imgData).toString('base64');
 
                 const captchaCode = await solveNumericCaptcha(base64);
@@ -571,7 +571,7 @@ async function resolveShortlink(url) {
                     while ((inputMatch = inputRegex.exec(formMatch[1])) !== null) {
                         inputs[inputMatch[1]] = inputMatch[2];
                     }
-                    
+
                     const captchaFieldName = formMatch[1].match(/name=["']([^"']*(?:captcha|code|response)[^"']*)["']/i)?.[1] || 'captcha';
                     inputs[captchaFieldName] = captchaCode;
 
@@ -579,9 +579,9 @@ async function resolveShortlink(url) {
                     const postHtml = await smartFetch(currentUrl, BASE_URL, {
                         method: 'POST',
                         provider: PROVIDER,
-                        headers: { 
+                        headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
-                            'Referer': currentUrl 
+                            'Referer': currentUrl
                         },
                         body: postBody
                     });
@@ -608,14 +608,14 @@ async function resolveShortlink(url) {
                 currentUrl = deltabitMatch[0];
                 break;
             }
-            
+
             const refreshMatch = html.match(/url=(https?:\/\/(?:deltabit|maxstream|stayonline|uprot|mixdrop|m1xdrop|safego|clicka)\.[^"']+(?<!\.ico|\.png|\.jpg))/i);
             if (refreshMatch) {
                 currentUrl = refreshMatch[1];
                 if (!currentUrl.includes('safego') && !currentUrl.includes('clicka')) break;
                 continue;
             }
-            
+
             // Se non abbiamo trovato nulla di nuovo, fermiamoci
             break;
         } catch (e) {
@@ -721,7 +721,7 @@ async function getStreams(id, type, season, episode, providerContext = null) {
 
         const displayName = `${info.title} ${effectiveSeason}x${effectiveEpisode}`;
         let streams = [];
-        
+
         // If client requested raw links (to handle IP-lock locally)
         if (providerContext && providerContext.format === 'links') {
             const resolvedLinks = await Promise.all(links.map(async (l) => ({

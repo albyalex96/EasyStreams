@@ -8059,9 +8059,9 @@ if (!IS_SERVER) {
             let extracted = null;
             const lower = link.url.toLowerCase();
             if (lower.includes("maxstream") || lower.includes("uprot.net")) {
-              extracted = yield extractMaxStream(link.url, "https://eurostreamings.help/");
+              extracted = yield extractMaxStream(link.url, "https://eurostreamings.work/");
             } else if (lower.includes("deltabit") || lower.includes("clicka.cc/delta")) {
-              extracted = yield extractDeltaBit(link.url, "https://eurostreamings.help/");
+              extracted = yield extractDeltaBit(link.url, "https://eurostreamings.work/");
             } else if (lower.includes("mixdrop") || lower.includes("m1xdrop")) {
               console.log(`[EuroStreaming-Client] MixDrop aggiunto direttamente.`);
               streams.push({ name: `[EuroStreaming] MixDrop`, url: link.url, quality: "HD" });
@@ -8094,7 +8094,7 @@ if (!IS_SERVER) {
   };
   return;
 }
-var BASE_URL = "https://eurostreamings.help";
+var BASE_URL = "https://eurostreamings.work";
 var PROVIDER = "eurostreaming";
 var TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
 var solveNumericCaptcha = null;

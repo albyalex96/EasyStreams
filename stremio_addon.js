@@ -2226,7 +2226,7 @@ async function warmupProviders() {
     const targets = [
         { name: 'Guardoserie', url: 'https://guardoserie.run/wp-admin/admin-ajax.php' },
         { name: 'Cinemacity', url: 'https://cinemacity.cc/index.php?do=search' },
-        { name: 'EuroStreaming', url: 'https://eurostreamings.help/?s=warmup' }
+        { name: 'EuroStreaming', url: 'https://eurostreamings.work/?s=warmup' }
     ];
 
     for (const target of targets) {
