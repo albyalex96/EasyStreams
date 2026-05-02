@@ -7463,8 +7463,6 @@ var require_cf_handler = __commonJS({
     };
     var httpsAgent = new https.Agent(agentOptions);
     var httpAgent = new http.Agent(agentOptions);
-    var requestCache = /* @__PURE__ */ new Map();
-    var CACHE_TTL = 6e5;
     function smartFetch2(_0, _1) {
       return __async(this, arguments, function* (url, domain, options = {}) {
         const getHost = (u) => {
@@ -7479,12 +7477,6 @@ var require_cf_handler = __commonJS({
         const provider = urlHost !== domainHost ? urlHost.split(".")[0] : options.provider || domainHost.split(".")[0];
         const sessionFile = path.join(process.cwd(), `cf-session-${provider}.json`);
         const cacheKey = `${options.method || "GET"}:${url}:${options.body || ""}`;
-        if (requestCache.has(cacheKey)) {
-          const cached = requestCache.get(cacheKey);
-          if (Date.now() - cached.timestamp < CACHE_TTL) {
-            return cached.data;
-          }
-        }
         const loadSession = () => {
           if (fs.existsSync(sessionFile)) {
             try {
@@ -7494,6 +7486,10 @@ var require_cf_handler = __commonJS({
                 const twoHours = 2 * 60 * 60 * 1e3;
                 if (ageMs > twoHours) {
                   console.log(`[CF-HANDLER][${provider}] Sessione su file troppo vecchia (${Math.round(ageMs / 6e4)} min), forzo refresh.`);
+                  try {
+                    fs.unlinkSync(sessionFile);
+                  } catch (e) {
+                  }
                   return {};
                 }
                 console.log(`[CF-HANDLER][${provider}] Sessione caricata da file (${Math.round(ageMs / 6e4)} min fa).`);
@@ -7568,7 +7564,6 @@ var require_cf_handler = __commonJS({
           if (session.cookies) {
             console.log(`[CF-HANDLER][${provider}] Richiesta completata usando sessione esistente.`);
           }
-          requestCache.set(cacheKey, { data: res.data, timestamp: Date.now() });
           return res.data;
         } catch (err) {
           if (err.response && (err.response.status === 403 || err.response.status === 503)) {
@@ -7583,7 +7578,6 @@ var require_cf_handler = __commonJS({
               throw new Error(`Bypass fallito per ${provider}`);
             }
             if (newSession.response) {
-              requestCache.set(cacheKey, { data: newSession.response, timestamp: Date.now() });
               return newSession.response;
             }
             let finalUrl = currentUrl;
@@ -7600,7 +7594,6 @@ var require_cf_handler = __commonJS({
               }
             }
             const res = yield doRequest(newSession, finalUrl);
-            requestCache.set(cacheKey, { data: res.data, timestamp: Date.now() });
             return res.data;
           }
           throw err;
