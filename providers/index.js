@@ -12145,29 +12145,8 @@ var require_cinemacity = __commonJS({
       const cookieB64 = "ZGxlX3VzZXJfaWQ9MzI3Mjk7IGRsZV9wYXNzd29yZD04OTQxNzFjNmE4ZGFiMThlZTU5NGQ1YzY1MjAwOWEzNTs=";
       return base64Decode(cookieB64);
     }
-    function getServerSmartFetch() {
-      if (!IS_SERVER) return null;
-      try {
-        return require_cf_handler().smartFetch;
-      } catch (e) {
-        return null;
-      }
-    }
     function fetchHtml(_0) {
       return __async(this, arguments, function* (url, headers = {}, options = {}) {
-        const useBypass = options && options.useBypass === true;
-        const smartFetch = useBypass ? getServerSmartFetch() : null;
-        if (typeof smartFetch === "function") {
-          return yield smartFetch(url, BASE_URL, {
-            timeout: FETCH_TIMEOUT,
-            headers: __spreadValues({
-              "User-Agent": USER_AGENT,
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-              "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
-            }, headers),
-            provider: "cinemacity"
-          });
-        }
         const response = yield fetchWithTimeout(url, {
           timeout: FETCH_TIMEOUT,
           headers: __spreadValues({
@@ -12247,8 +12226,6 @@ var require_cinemacity = __commonJS({
             "Sec-Fetch-Mode": "navigate",
             "Sec-Fetch-Site": "same-origin",
             "Sec-Fetch-User": "?1"
-          }, {
-            useBypass: false
           });
           return extractImdbIdFromHtml(html);
         } catch (_) {
@@ -12621,12 +12598,11 @@ var require_cinemacity = __commonJS({
         }
         try {
           const isStremioAddon = providerContext && providerContext.__requestContext === true;
-          const useServerBypass = isStremioAddon && IS_SERVER;
           const proxyUrl = providerContext && providerContext.proxyUrl || (typeof global !== "undefined" && global.CF_PROXY_URL ? global.CF_PROXY_URL : null);
           const proxyPassword = providerContext && providerContext.proxyPassword || "";
-          let searchResult = yield searchByImdb(imdbId, { useBypass: useServerBypass });
+          let searchResult = yield searchByImdb(imdbId);
           if (!searchResult || !searchResult.url) {
-            searchResult = yield searchByTitleFallback(imdbId, providerType, { useBypass: useServerBypass });
+            searchResult = yield searchByTitleFallback(imdbId, providerType);
           }
           if (!searchResult || !searchResult.url) {
             return [];
@@ -12666,8 +12642,6 @@ var require_cinemacity = __commonJS({
             "User-Agent": USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
-          }, {
-            useBypass: useServerBypass
           });
           const playerReferer = extractPlayerReferer(html, movieUrl);
           const atobRegex = /atob\s*\(\s*['"](.*?)['"]\s*\)/gi;
