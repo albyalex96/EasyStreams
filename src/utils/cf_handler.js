@@ -131,6 +131,13 @@ async function smartFetch(url, domain, options = {}) {
         return { data, status: response.status, headers: response.headers };
     };
 
+    const isUsefulHtml = (value) => {
+        const text = typeof value === 'string' ? value.trim() : '';
+        if (text.length < 200) return false;
+        if (/Just a moment|cf-browser-verification|challenge-platform|turnstile|cf-challenge/i.test(text)) return false;
+        return true;
+    };
+
     try {
         const res = await doRequest(session);
         if (res.status === 403 || res.status === 503) {
@@ -158,7 +165,7 @@ async function smartFetch(url, domain, options = {}) {
             }
             
             // Se FlareSolverr ha già restituito il contenuto della pagina, usiamolo
-            if (newSession.response) {
+            if (isUsefulHtml(newSession.response)) {
                 return newSession.response;
             }
 

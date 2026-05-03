@@ -5,6 +5,14 @@ const { checkQualityFromPlaylist } = require('../quality_helper.js');
 const { fetchWithTimeout } = require('../fetch_helper.js');
 
 const IS_SERVER = typeof process !== 'undefined' && !!(process.versions && process.versions.node);
+let smartFetch = null;
+if (IS_SERVER) {
+    try {
+        ({ smartFetch } = require('../utils/cf_handler.js'));
+    } catch (_) {
+        smartFetch = null;
+    }
+}
 const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
 // Cross-platform Base64 decoder for Node.js and React Native (Nuvio/Hermes)
@@ -79,6 +87,20 @@ function getSessionCookies() {
 }
 
 async function fetchHtml(url, headers = {}, options = {}) {
+    if (IS_SERVER && typeof smartFetch === "function") {
+        return await smartFetch(url, BASE_URL, {
+            ...options,
+            timeout: options.timeout || FETCH_TIMEOUT,
+            provider: "cinemacity",
+            headers: {
+                "User-Agent": USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                ...headers
+            }
+        });
+    }
+
     const response = await fetchWithTimeout(url, {
         timeout: FETCH_TIMEOUT,
         headers: {

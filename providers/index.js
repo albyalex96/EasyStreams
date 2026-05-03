@@ -7556,6 +7556,12 @@ var require_cf_handler = __commonJS({
           }
           return { data, status: response.status, headers: response.headers };
         });
+        const isUsefulHtml = (value) => {
+          const text = typeof value === "string" ? value.trim() : "";
+          if (text.length < 200) return false;
+          if (/Just a moment|cf-browser-verification|challenge-platform|turnstile|cf-challenge/i.test(text)) return false;
+          return true;
+        };
         try {
           const res = yield doRequest(session);
           if (res.status === 403 || res.status === 503) {
@@ -7580,7 +7586,7 @@ var require_cf_handler = __commonJS({
             if (options.meta && newSession.url) {
               options.meta.finalUrl = newSession.url;
             }
-            if (newSession.response) {
+            if (isUsefulHtml(newSession.response)) {
               return newSession.response;
             }
             let finalUrl = currentUrl;
@@ -7736,10 +7742,15 @@ var require_ocr = __commonJS({
     function solveNumericCaptcha(imgBase64) {
       return __async(this, null, function* () {
         const { spawn } = require("child_process");
-        return new Promise((resolve, reject) => {
+        const candidates = [
+          process.env.PYTHON_BIN,
+          process.platform === "win32" ? "python" : "python3",
+          process.platform === "win32" ? "py" : "python"
+        ].filter(Boolean);
+        const trySolve = (pythonBin, allowFallback) => new Promise((resolve, reject) => {
           try {
             const cleanBase64 = imgBase64.includes(",") ? imgBase64.split(",")[1] : imgBase64;
-            const python = spawn("python", ["ocr_helper.py"]);
+            const python = spawn(pythonBin, ["ocr_helper.py"]);
             let result = "";
             let error = "";
             python.stdin.write(cleanBase64);
@@ -7752,20 +7763,30 @@ var require_ocr = __commonJS({
             });
             python.on("close", (code) => {
               if (code !== 0) {
-                console.error("[OCR] Errore processo Python:", error);
+                console.error(`[OCR] Errore processo Python (${pythonBin}):`, error);
                 return reject(new Error("OCR engine error"));
               }
               const solved = result.trim();
               resolve(solved);
             });
             python.on("error", (err) => {
-              console.error("[OCR] Errore avvio Python:", err.message);
+              if (!allowFallback) console.error(`[OCR] Errore avvio Python (${pythonBin}):`, err.message);
               reject(err);
             });
           } catch (e) {
             reject(e);
           }
         });
+        let lastError = null;
+        for (let i = 0; i < candidates.length; i++) {
+          try {
+            return yield trySolve(candidates[i], i < candidates.length - 1);
+          } catch (e) {
+            lastError = e;
+            if (e && e.code && e.code !== "ENOENT") break;
+          }
+        }
+        throw lastError || new Error("OCR engine error");
       });
     }
     module2.exports = { solveNumericCaptcha };
@@ -12101,6 +12122,14 @@ var require_cinemacity = __commonJS({
     var { checkQualityFromPlaylist } = require_quality_helper();
     var { fetchWithTimeout } = require_fetch_helper();
     var IS_SERVER = typeof process !== "undefined" && !!(process.versions && process.versions.node);
+    var smartFetch = null;
+    if (IS_SERVER) {
+      try {
+        ({ smartFetch } = require_cf_handler());
+      } catch (_) {
+        smartFetch = null;
+      }
+    }
     var BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
     function base64Decode(str) {
       try {
@@ -12159,6 +12188,17 @@ var require_cinemacity = __commonJS({
     }
     function fetchHtml(_0) {
       return __async(this, arguments, function* (url, headers = {}, options = {}) {
+        if (IS_SERVER && typeof smartFetch === "function") {
+          return yield smartFetch(url, BASE_URL, __spreadProps(__spreadValues({}, options), {
+            timeout: options.timeout || FETCH_TIMEOUT,
+            provider: "cinemacity",
+            headers: __spreadValues({
+              "User-Agent": USER_AGENT,
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+              "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
+            }, headers)
+          }));
+        }
         const response = yield fetchWithTimeout(url, {
           timeout: FETCH_TIMEOUT,
           headers: __spreadValues({
@@ -13476,7 +13516,7 @@ var require_eurostreaming = __commonJS({
           if (!url || !isRedirectorUrl(url)) continue;
           try {
             const resolvedUrl = yield resolveShortlink(url);
-            results.push({ url, resolvedUrl, ok: Boolean(resolvedUrl && resolvedUrl !== url) });
+            results.push({ url, resolvedUrl, ok: Boolean(resolvedUrl && resolvedUrl !== url && !isRedirectorUrl(resolvedUrl)) });
           } catch (e) {
             results.push({ url, error: e.message, ok: false });
           }
