@@ -12467,7 +12467,9 @@ var require_cinemacity = __commonJS({
               "Sec-Fetch-Mode": "navigate",
               "Sec-Fetch-Site": "same-origin",
               "Sec-Fetch-User": "?1"
-            }, options);
+            }, __spreadProps(__spreadValues({}, options), {
+              skipBypassOnFailure: true
+            }));
             const candidates = extractCandidateLinksFromListing(html, providerType);
             if (candidates.length === 0) {
               break;
@@ -12493,7 +12495,7 @@ var require_cinemacity = __commonJS({
             }
           } catch (e) {
             const status = getHttpStatusFromError(e);
-            if (status !== 404 && status !== 403) {
+            if (status !== 404 && status !== 403 && !isCloudflareBlockedError(e)) {
               console.error(`[CinemaCity] Listing fallback error for page ${pageUrl}:`, e);
             }
             break;

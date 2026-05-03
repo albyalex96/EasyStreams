@@ -440,7 +440,10 @@ async function searchByTitleFallback(id, providerType, options = {}) {
                 "Sec-Fetch-Mode": "navigate",
                 "Sec-Fetch-Site": "same-origin",
                 "Sec-Fetch-User": "?1"
-            }, options);
+            }, {
+                ...options,
+                skipBypassOnFailure: true
+            });
 
             const candidates = extractCandidateLinksFromListing(html, providerType);
             if (candidates.length === 0) {
@@ -470,7 +473,7 @@ async function searchByTitleFallback(id, providerType, options = {}) {
             }
         } catch (e) {
             const status = getHttpStatusFromError(e);
-            if (status !== 404 && status !== 403) {
+            if (status !== 404 && status !== 403 && !isCloudflareBlockedError(e)) {
                 console.error(`[CinemaCity] Listing fallback error for page ${pageUrl}:`, e);
             }
             break;
