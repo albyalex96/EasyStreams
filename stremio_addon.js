@@ -1594,12 +1594,13 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
                             );
                             proxiedByEasyProxy = finalStreamUrl !== s.url;
                         } else if (isMixdropStream(s)) {
+                            const mixdropExtension = ['eurostreaming', 'guardahd'].includes(name) ? 'mp4' : 'm3u8';
                             finalStreamUrl = buildEasyProxyExtractorUrl(
                                 easyProxyUrl,
                                 easyProxyPassword,
                                 'mixdrop',
                                 s.easyProxySourceUrl || s.url,
-                                name === 'eurostreaming' ? 'mp4' : 'm3u8'
+                                mixdropExtension
                             );
                             proxiedByEasyProxy = finalStreamUrl !== s.url;
                         } else if (isMaxstreamStream(s)) {
