@@ -160,7 +160,7 @@ app.use((req, res, next) => {
 });
 
 // Global timeout configuration
-const FETCH_TIMEOUT = 10000;
+const FETCH_TIMEOUT = 15000;
 const STREAM_RESPONSE_TIMEOUT = 45000;
 const DEFAULT_PROVIDER_TIMEOUT = 40000;
 const PROVIDER_TIMEOUT = 40000;
