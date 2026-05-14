@@ -44,7 +44,7 @@
       "description": "Trovala su torbox.app/settings",
       "type": "password",
       "required": false
-    },],
+    }],
   "scrapers": [
     {
       "id": "easystreams-guardoserie",
