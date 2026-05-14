@@ -331,6 +331,7 @@ function getPlaylistHeaders(embedUrl) {
     "Accept": "*/*",
     "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
     "Sec-Fetch-Dest": "empty",
+    "Content-Type": "application/vnd.apple.mpegurl",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Site": "same-origin"
   };
