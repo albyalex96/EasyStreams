@@ -1,5 +1,5 @@
 {
-  "name": "EasyStreams",
+  "name": "TestStreams",
   "version": "1.1.73",
   "settings": [
     {
@@ -8,36 +8,6 @@
       "description": "Trovala su torbox.app/settings",
       "type": "text",
       "required": true
-    },{
-      "key": "api_key",
-      "label": "API Key",
-      "description": "Trovala su torbox.app/settings",
-      "type": "password",
-      "required": false
-    },{
-      "key": "api_key",
-      "label": "API Key",
-      "description": "Trovala su torbox.app/settings",
-      "type": "password",
-      "required": false
-    },{
-      "key": "api_key",
-      "label": "API Key",
-      "description": "Trovala su torbox.app/settings",
-      "type": "password",
-      "required": false
-    },{
-      "key": "api_key",
-      "label": "API Key",
-      "description": "Trovala su torbox.app/settings",
-      "type": "password",
-      "required": false
-    },{
-      "key": "api_key",
-      "label": "API Key",
-      "description": "Trovala su torbox.app/settings",
-      "type": "password",
-      "required": false
     },{
       "key": "api_key",
       "label": "API Key",
