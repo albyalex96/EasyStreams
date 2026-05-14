@@ -1,6 +1,14 @@
 {
   "name": "EasyStreams",
   "version": "1.1.73",
+  "settings": [
+    {
+      "key": "api_key",
+      "label": "API Key",
+      "description": "Trovala su torbox.app/settings",
+      "type": "password",
+      "required": true
+    }],
   "scrapers": [
     {
       "id": "easystreams-guardoserie",
