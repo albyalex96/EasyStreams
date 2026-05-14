@@ -453,6 +453,7 @@ function getStreams(id, type, season, episode, providerContext = null) {
     const normalizedType = requestedType === "series" ? "tv" : requestedType;
     const baseUrl = getStreamingCommunityBaseUrl();
     const commonHeaders = getCommonHeaders();
+    console.warn('APIKEY USATA ALBY', globalThis.SCRAPER_SETTINGS.api_key)
     let tmdbId = id.toString();
     let resolvedSeason = season;
     const contextTmdbId = providerContext && /^\d+$/.test(String(providerContext.tmdbId || "")) ? String(providerContext.tmdbId) : null;
