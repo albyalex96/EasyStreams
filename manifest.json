@@ -3,8 +3,8 @@
   "version": "1.1.73",
   "settings": [
     {
-      "key": "api_key",
-      "label": "API Key",
+      "key": "api_base",
+      "label": "API Base",
       "description": "Trovala su torbox.app/settings",
       "type": "text",
       "required": true
