@@ -8,7 +8,43 @@
       "description": "Trovala su torbox.app/settings",
       "type": "password",
       "required": true
-    }],
+    },{
+      "key": "api_key",
+      "label": "API Key",
+      "description": "Trovala su torbox.app/settings",
+      "type": "password",
+      "required": false
+    },{
+      "key": "api_key",
+      "label": "API Key",
+      "description": "Trovala su torbox.app/settings",
+      "type": "password",
+      "required": false
+    },{
+      "key": "api_key",
+      "label": "API Key",
+      "description": "Trovala su torbox.app/settings",
+      "type": "password",
+      "required": false
+    },{
+      "key": "api_key",
+      "label": "API Key",
+      "description": "Trovala su torbox.app/settings",
+      "type": "password",
+      "required": false
+    },{
+      "key": "api_key",
+      "label": "API Key",
+      "description": "Trovala su torbox.app/settings",
+      "type": "password",
+      "required": false
+    },{
+      "key": "api_key",
+      "label": "API Key",
+      "description": "Trovala su torbox.app/settings",
+      "type": "password",
+      "required": false
+    },],
   "scrapers": [
     {
       "id": "easystreams-guardoserie",
