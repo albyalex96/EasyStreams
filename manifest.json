@@ -18,7 +18,7 @@
       "default": "https://api.torbox.app"
     },
     {
-      "key": "base_url",
+      "key": "base_url_one",
       "label": "Base URL",
       "description": "Lascia vuoto per usare il default",
       "type": "text",
@@ -26,7 +26,7 @@
       "default": "https://api.torbox.app"
     },
     {
-      "key": "base_url",
+      "key": "base_url_two",
       "label": "Base URL",
       "description": "Lascia vuoto per usare il default",
       "type": "text",
@@ -34,7 +34,7 @@
       "default": "https://api.torbox.app"
     },
     {
-      "key": "base_url",
+      "key": "base_url_three",
       "label": "Base URL",
       "description": "Lascia vuoto per usare il default",
       "type": "text",
@@ -42,7 +42,7 @@
       "default": "https://api.torbox.app"
     },
     {
-      "key": "base_url",
+      "key": "base_url_four",
       "label": "Base URL",
       "description": "Lascia vuoto per usare il default",
       "type": "text",
