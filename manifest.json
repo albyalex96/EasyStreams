@@ -16,6 +16,38 @@
       "type": "text",
       "required": false,
       "default": "https://api.torbox.app"
+    },
+    {
+      "key": "base_url",
+      "label": "Base URL",
+      "description": "Lascia vuoto per usare il default",
+      "type": "text",
+      "required": false,
+      "default": "https://api.torbox.app"
+    },
+    {
+      "key": "base_url",
+      "label": "Base URL",
+      "description": "Lascia vuoto per usare il default",
+      "type": "text",
+      "required": false,
+      "default": "https://api.torbox.app"
+    },
+    {
+      "key": "base_url",
+      "label": "Base URL",
+      "description": "Lascia vuoto per usare il default",
+      "type": "text",
+      "required": false,
+      "default": "https://api.torbox.app"
+    },
+    {
+      "key": "base_url",
+      "label": "Base URL",
+      "description": "Lascia vuoto per usare il default",
+      "type": "text",
+      "required": false,
+      "default": "https://api.torbox.app"
     }
   ],
   "scrapers": [
