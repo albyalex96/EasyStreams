@@ -336,7 +336,7 @@ function base64Decode(str) {
   }
 }
 var BASE_URL = base64Decode("aHR0cHM6Ly9jaW5lbWFjaXR5LmNj");
-var USER_AGENT = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
+var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36";
 var FETCH_TIMEOUT = 1e4;
 var TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
 var SITEMAP_URL = `${BASE_URL}/news_pages.xml`;
@@ -1098,7 +1098,7 @@ function getStreams(id, type, season, episode, providerContext = null) {
       const cookies = getSessionCookies();
       const html = yield fetchHtml(movieUrl, {
         "Referer": `${BASE_URL}/`,
-        "Cookie": cookies,
+        "Cookie": "dle_user_id=32729; dle_password=894171c6a8dab18ee594d5c652009a35",
         "User-Agent": USER_AGENT,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
