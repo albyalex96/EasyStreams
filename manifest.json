@@ -81,6 +81,64 @@
       "enabled": true
     },
     {
+      "id": "easystreams-vidxgo",
+      "name": "VidxGo",
+      "version": "1.1.42",
+      "description": "Movies and Series from VidxGo",
+      "resources": ["stream"],
+      "contentLanguage": ["it"],
+      "formats": ["mp4", "m3u8"],
+      "idPrefixes": ["tmdb:", "tt"],
+      "filename": "providers/vidxgo.js",
+      "supportedTypes": ["movie", "tv", "series"],
+      "enabled": true
+    },
+     {
+      "id": "torrentio",
+      "name": "Torrent Direct",
+      "description": "Film e serie via torrent (Torrentio/TPB) - multi-lingua",
+      "version": "1.0.27",
+      "author": "batman",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "resources": [
+        "stream"
+      ],
+      "contentLanguage": [
+        "en",
+        "it"
+      ],
+      "formats": [
+        "torrent"
+      ],
+      "filename": "extractor/torrentio.js",
+      "enabled": true
+    },
+    {
+      "id": "corsaroviola",
+      "name": "CorsaroViola (ITA)",
+      "description": "Film e serie ITA via IlCorsaroViola + TorBox (stream HTTP istantanei)",
+      "version": "1.0.1",
+      "author": "batman",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "resources": [
+        "stream"
+      ],
+      "contentLanguage": [
+        "it"
+      ],
+      "formats": [
+        "m3u8"
+      ],
+      "filename": "extractor/corsaroviola.js",
+      "enabled": true
+    },
+    {
       "id": "easystreams-cinemacity",
       "name": "CinemaCity",
       "version": "1.0.38",
