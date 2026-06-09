@@ -97,6 +97,7 @@
       "id": "torrentio",
       "name": "Torrent Direct",
       "description": "Film e serie via torrent (Torrentio/TPB) - multi-lingua",
+      "hasSettings": true,
       "version": "1.0.27",
       "author": "batman",
       "supportedTypes": [
