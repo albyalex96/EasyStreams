@@ -136,7 +136,7 @@
       "formats": [
         "m3u8"
       ],
-      "filename": "extractor/corsaroviola.js",
+      "filename": "providers/corsaroviola.js",
       "enabled": true
     },
     {
