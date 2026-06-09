@@ -143,7 +143,7 @@ async function getStreams(imdbId, mediaType, season, episode) {
 
 async function onSettings() {
     return [
-        { type: "header", label: "Prowlare Base URL" },
+        { type: "header", label: "Torrentio Settings" },
         { 
             type: "text", 
             key: "prowlarr_base_url", 

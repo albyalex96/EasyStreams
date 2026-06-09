@@ -242,8 +242,6 @@ var require_fetch_helper = __commonJS({
 var { formatStream } = require_formatter();
 var { fetchWithTimeout } = require_fetch_helper();
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-var BASE_URL = "https://instance-1-prowlarr.duckdns.org/nuvio";
-var TOKEN = "nv_5b91a4f2c8e3";
 var MAX_RESULTS = 12;
 var QUALITY_RANKING = { "4K": 4, "1080p": 3, "720p": 2, "480p": 1, "Unknown": 0 };
 var TRACKERS = [
@@ -327,9 +325,12 @@ function formatStreamItem(stream, mediaInfo) {
 function getStreams(imdbId, mediaType, season, episode) {
   return __async(this, null, function* () {
     var _a;
+    const settings = globalThis.SCRAPER_SETTINGS || {};
+    const BASE_URL = settings.prowlarr_base_url || null;
+    const TOKEN = settings.prowlarr_api_key || null;
     try {
-      if (!BASE_URL) {
-        console.log("[torrentio] MIDDLEWARE_URL non configurato");
+      if (!BASE_URL || !TOKEN) {
+        console.log("[torrentio] MIDDLEWARE_URL o API Key non configurati");
         return [];
       }
       const type = mediaType === "tv" || mediaType === "series" ? "tv" : "movie";
@@ -362,8 +363,32 @@ function getStreams(imdbId, mediaType, season, episode) {
     }
   });
 }
+function onSettings() {
+  return __async(this, null, function* () {
+    return [
+      { type: "header", label: "Torrentio Settings" },
+      {
+        type: "text",
+        key: "prowlarr_base_url",
+        label: "Prowlarr Base URL",
+        placeholder: "Enter your Prowlarr base URL (e.g. https://prowlarr.example.com)",
+        description: "Required."
+      },
+      { type: "header", label: "API Key" },
+      {
+        type: "text",
+        key: "prowlarr_api_key",
+        label: "Prowlarr API Key",
+        placeholder: "Enter your Prowlarr API Key",
+        description: "Required.",
+        isPassword: true
+      }
+    ];
+  });
+}
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams };
+  module.exports = { getStreams, onSettings };
 } else {
   global.getStreams = getStreams;
+  global.onSettings = onSettings;
 }
