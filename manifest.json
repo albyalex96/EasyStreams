@@ -113,7 +113,7 @@
       "formats": [
         "torrent"
       ],
-      "filename": "extractor/torrentio.js",
+      "filename": "providers/torrentio.js",
       "enabled": true
     },
     {
