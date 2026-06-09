@@ -100,7 +100,8 @@ function formatStreamItem(stream, tmdbInfo) {
     seeders,
     type: "movie",
     provider: "CorsaroViola",
-    behaviorHints: { bingeGroup: "nuvio-icv-" + quality }
+    infoHash: stream.infoHash,
+    behaviorHints: { bingeGroup: "nuvio-icv-" + quality, filename: stream.behaviorHints.filename || null, videoSize: size || stream.behaviorHints.videoSize, cached: cached || stream._meta.cached }
   };
 }
 function getStreams(tmdbId, mediaType, season, episode) {
@@ -143,7 +144,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
       }
       let data = yield res.json();
       let streams = Array.isArray(data.streams) ? data.streams : [];
-      let results = streams.filter((s) => s && s.url).map((s) => formatStreamItem(s, tmdbInfo)).filter((s) => s._quality === "4K" || s._quality === "1080p");
+      let results = streams.map((s) => formatStreamItem(s, tmdbInfo)).filter((s) => s._quality === "4K" || s._quality === "1080p");
       results.sort((a, b) => {
         let byCached = (b._cached ? 1 : 0) - (a._cached ? 1 : 0);
         if (byCached !== 0) return byCached;
@@ -151,6 +152,9 @@ function getStreams(tmdbId, mediaType, season, episode) {
         if (byQuality !== 0) return byQuality;
         return (b._seeders || 0) - (a._seeders || 0);
       });
+      console.log(`[CorsaroViola] Trovati ${results.length}`);
+      results = results.filter((s) => s.seeders > 0);
+      console.log(`[CorsaroViola] Filtrati ${results.length}`);
       return results.slice(0, MAX_RESULTS).map((s) => {
         delete s._cached;
         delete s._seeders;

@@ -1,6 +1,7 @@
+const { formatStream } = require('../formatter.js');
+const { fetchWithTimeout } = require('../fetch_helper.js');
+
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-const BASE_URL   = "https://instance-1-prowlarr.duckdns.org/nuvio";
-const TOKEN      = "nv_5b91a4f2c8e3";   // ricavato da XOR con chiave "nuvio-prowlarr-torbox-2026"
 const MAX_RESULTS = 12;
 
 const QUALITY_RANKING = { '4K': 4, '1080p': 3, '720p': 2, '480p': 1, 'Unknown': 0 };
@@ -91,9 +92,12 @@ function formatStreamItem(stream, mediaInfo) {
 }
 
 async function getStreams(imdbId, mediaType, season, episode) {
+  const settings = globalThis.SCRAPER_SETTINGS || {};
+  const BASE_URL   = settings.prowlarr_base_url || null;
+  const TOKEN   = settings.prowlarr_api_key || null;  
   try {
-    if (!BASE_URL) {
-      console.log('[torrentio] MIDDLEWARE_URL non configurato');
+    if (!BASE_URL || !TOKEN) {
+      console.log('[torrentio] MIDDLEWARE_URL o API Key non configurati');
       return [];
     }
 
@@ -137,8 +141,31 @@ async function getStreams(imdbId, mediaType, season, episode) {
   }
 }
 
+async function onSettings() {
+    return [
+        { type: "header", label: "Prowlare Base URL" },
+        { 
+            type: "text", 
+            key: "prowlarr_base_url", 
+            label: "Prowlarr Base URL", 
+            placeholder: "Enter your Prowlarr base URL (e.g. https://prowlarr.example.com)",
+            description: "Required." 
+        },
+        { type: "header", label: "API Key" },
+        { 
+            type: "text", 
+            key: "prowlarr_api_key", 
+            label: "Prowlarr API Key", 
+            placeholder: "Enter your Prowlarr API Key",
+            description: "Required.",
+            isPassword: true 
+        }
+    ];
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { getStreams };
+  module.exports = { getStreams, onSettings };
 } else {
   global.getStreams = getStreams;
+  global.onSettings = onSettings;
 }
